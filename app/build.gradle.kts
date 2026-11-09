@@ -2,6 +2,8 @@ plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
+    alias(libs.plugins.ksp)
+    alias(libs.plugins.hilt)
 }
 
 android {
@@ -12,8 +14,8 @@ android {
         applicationId = "dev.lyriclane"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "0.1.0-phase0"
+        versionCode = 2
+        versionName = "0.2.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
@@ -23,8 +25,8 @@ android {
             isMinifyEnabled = false
         }
         release {
-            // Sideloaded personal build: keep it debuggable-friendly and unshrunk
-            // so stack traces from the car are readable.
+            // Sideloaded personal build: unshrunk so a stack trace from the car
+            // is readable without a mapping file.
             isMinifyEnabled = false
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }
@@ -55,6 +57,10 @@ android {
 }
 
 dependencies {
+    implementation(project(":core:media"))
+    implementation(project(":core:lyrics"))
+    implementation(project(":core:spotify"))
+
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.lifecycle.viewmodel.compose)
@@ -71,6 +77,11 @@ dependencies {
 
     implementation(libs.androidx.media3.session)
     implementation(libs.androidx.media3.common)
+
+    implementation(libs.hilt.android)
+    implementation(libs.androidx.hilt.navigation.compose)
+    ksp(libs.hilt.compiler)
+    implementation(libs.okhttp)
 
     testImplementation(libs.junit)
     testImplementation(libs.truth)

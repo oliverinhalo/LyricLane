@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- Lets us see that Spotify exists on API 30+ package-visibility rules. -->
+    <queries>
+        <package android:name="com.spotify.music" />
+    </queries>
+
+    <application>
+        <!-- Being an enabled notification listener is what makes
+             MediaSessionManager.getActiveSessions legal for a sideloaded app.
+             The service reads no notifications. -->
+        <service
+            android:name="dev.lyriclane.spotify.SpotifyNotificationListener"
+            android:exported="true"
+            android:label="LyricLane"
+            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
+            <intent-filter>
+                <action android:name="android.service.notification.NotificationListenerService" />
+            </intent-filter>
+        </service>
+    </application>
+</manifest>

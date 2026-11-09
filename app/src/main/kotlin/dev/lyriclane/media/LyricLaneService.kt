@@ -2,10 +2,6 @@ package dev.lyriclane.media
 
 import android.app.PendingIntent
 import android.content.Intent
-import android.graphics.Bitmap
-import android.graphics.Canvas
-import android.graphics.Color
-import android.graphics.Paint
 import android.os.Bundle
 import android.os.Looper
 import android.os.SystemClock
@@ -23,51 +19,79 @@ import androidx.media3.session.SessionResult
 import com.google.common.collect.ImmutableList
 import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
+import dagger.hilt.android.AndroidEntryPoint
 import dev.lyriclane.R
-import dev.lyriclane.diag.TickLog
-import dev.lyriclane.diag.TickerRate
+import dev.lyriclane.media.MetadataPacing.pace
 import dev.lyriclane.ui.MainActivity
-import java.io.ByteArrayOutputStream
-import java.util.Locale
+import javax.inject.Inject
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
-import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 
 /**
  * The media app Android Auto sees.
  *
- * Phase 0 spike: it publishes a session whose title changes on a timer, so we
- * can establish — before building anything else — that the car's now-playing
- * screen *and* the split-screen dashboard card both re-render live metadata.
- * Everything downstream of that assumption (lyrics as metadata) depends on it.
+ * It publishes a session whose *title is the current lyric line*. That is the
+ * whole trick: Android Auto renders both the now-playing screen and the
+ * split-screen dashboard card from this metadata, and gives media apps no way
+ * to draw anything of their own.
+ *
+ * It plays no audio and takes no audio focus — Spotify keeps playing
+ * underneath, and every transport control the car sends is forwarded to it.
  */
 @OptIn(UnstableApi::class)
+@AndroidEntryPoint
 class LyricLaneService : MediaLibraryService() {
+
+    @Inject lateinit var orchestrator: LyricLaneOrchestrator
+
+    @Inject lateinit var settings: SettingsStore
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
     private lateinit var player: MirrorPlayer
     private var librarySession: MediaLibrarySession? = null
 
-    private var rate: TickerRate = TickerRate.DEFAULT
-    private var sequence = 0L
+    /** Artwork encoding is expensive, so it is only redone when the song changes. */
+    private var artworkSignature: String? = null
 
     override fun onCreate() {
         super.onCreate()
-        player = MirrorPlayer(Looper.getMainLooper()).apply {
-            setPosition(positionMs = 0L, durationMs = 60 * 60 * 1000L, advancing = true)
-            setArtwork(placeholderArtworkPng())
+        player = MirrorPlayer(Looper.getMainLooper())
+        player.transportSink = object : MirrorPlayer.TransportSink {
+            override fun onPlayWhenReadyRequested(playWhenReady: Boolean) {
+                if (playWhenReady) orchestrator.play() else orchestrator.pause()
+            }
+
+            override fun onSeekRequested(positionMs: Long) {
+                orchestrator.seekTo(positionMs)
+            }
+
+            override fun onSkipToNextRequested() {
+                orchestrator.skipToNext()
+            }
+
+            override fun onSkipToPreviousRequested() {
+                orchestrator.skipToPrevious()
+            }
         }
+
         librarySession = MediaLibrarySession.Builder(this, player, LibraryCallback())
-            .setId(SESSION_ID)
+            .setId("LyricLane")
             .setSessionActivity(sessionActivity())
-            .setCustomLayout(ImmutableList.of(cycleRateButton()))
+            .setCustomLayout(customLayout())
             .build()
-        startTicker()
-        Log.i(TAG, "session created, ticking every ${rate.intervalMs} ms")
+
+        orchestrator.start()
+        observeLyrics()
+        observeSpotify()
+        observeSettings()
     }
 
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaLibrarySession? =
@@ -85,48 +109,69 @@ class LyricLaneService : MediaLibraryService() {
         super.onDestroy()
     }
 
-    // --- the spike itself -------------------------------------------------------------
+    // --- wiring ------------------------------------------------------------------------
 
-    private fun startTicker() {
+    @kotlin.OptIn(ExperimentalCoroutinesApi::class)
+    private fun observeLyrics() {
         scope.launch {
-            while (true) {
-                pushTick()
-                delay(rate.intervalMs)
+            // Re-arm the pacing whenever the user changes the minimum hold.
+            settings.settings
+                .map { it.minHoldMs }
+                .distinctUntilChanged()
+                .flatMapLatest { holdMs -> orchestrator.display.pace(holdMs) }
+                .collect { display ->
+                    player.setDisplayText(display.title, display.subtitle)
+                }
+        }
+    }
+
+    private fun observeSpotify() {
+        scope.launch {
+            orchestrator.spotify.collect { state ->
+                val track = state.track
+                val playback = state.playback
+                player.setTrackUid(track?.signature ?: IDLE_UID)
+                player.setPosition(
+                    positionMs = playback?.positionMsAt(SystemClock.elapsedRealtime()) ?: 0L,
+                    durationMs = track?.durationMs ?: 0L,
+                    advancing = state.isPlaying,
+                    speed = playback?.speed ?: 1f,
+                )
+                player.setPlaying(state.isPlaying)
+
+                if (track?.signature != artworkSignature) {
+                    artworkSignature = track?.signature
+                    player.setArtwork(Artwork.toBytes(track?.artwork))
+                }
             }
         }
     }
 
-    private fun pushTick() {
-        sequence += 1
-        val now = System.currentTimeMillis()
-        val title = String.format(
-            Locale.US,
-            "Tick %03d  ·  %tT.%03d",
-            sequence,
-            now,
-            now % 1000,
-        )
-        val subtitle = "Phase 0 spike · pushing every ${rate.label}"
-        player.setDisplayText(title, subtitle)
-        TickLog.record(
-            TickLog.Entry(
-                sequence = sequence,
-                elapsedRealtimeMs = SystemClock.elapsedRealtime(),
-                wallClockMs = now,
-                title = title,
-            )
-        )
-        Log.i(TAG, "push #$sequence title=\"$title\"")
+    private fun observeSettings() {
+        scope.launch {
+            settings.settings.collect { librarySession?.setCustomLayout(customLayout()) }
+        }
     }
 
-    private fun setRate(newRate: TickerRate) {
-        if (newRate == rate) return
-        rate = newRate
-        Log.i(TAG, "push rate -> ${newRate.label}")
-        librarySession?.setCustomLayout(ImmutableList.of(cycleRateButton()))
-    }
+    // --- custom actions shown in the car ----------------------------------------------
 
-    // --- session plumbing -------------------------------------------------------------
+    private fun customLayout(): ImmutableList<CommandButton> = ImmutableList.of(
+        button(COMMAND_OFFSET_MINUS, "Offset −", R.drawable.ic_offset_minus),
+        button(COMMAND_OFFSET_PLUS, "Offset +", R.drawable.ic_offset_plus),
+        button(
+            COMMAND_TOGGLE_LYRICS,
+            if (settings.current.lyricsEnabled) "Lyrics on" else "Lyrics off",
+            if (settings.current.lyricsEnabled) R.drawable.ic_lyrics_on else R.drawable.ic_lyrics_off,
+        ),
+    )
+
+    private fun button(action: String, label: String, iconRes: Int): CommandButton =
+        CommandButton.Builder(CommandButton.ICON_UNDEFINED)
+            .setDisplayName(label)
+            .setCustomIconResId(iconRes)
+            .setSessionCommand(SessionCommand(action, Bundle.EMPTY))
+            .setEnabled(true)
+            .build()
 
     private fun sessionActivity(): PendingIntent =
         PendingIntent.getActivity(
@@ -136,14 +181,6 @@ class LyricLaneService : MediaLibraryService() {
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
 
-    private fun cycleRateButton(): CommandButton =
-        CommandButton.Builder(CommandButton.ICON_UNDEFINED)
-            .setDisplayName("Rate: ${rate.label}")
-            .setCustomIconResId(R.drawable.ic_speed)
-            .setSessionCommand(SessionCommand(COMMAND_CYCLE_RATE, Bundle.EMPTY))
-            .setEnabled(true)
-            .build()
-
     private inner class LibraryCallback : MediaLibrarySession.Callback {
 
         override fun onConnect(
@@ -151,14 +188,18 @@ class LyricLaneService : MediaLibraryService() {
             controller: MediaSession.ControllerInfo,
         ): MediaSession.ConnectionResult {
             Log.i(TAG, "controller connected: ${controller.packageName}")
+            // A controller connecting is also the moment the car opens us, which
+            // is a good time to re-check whether we can see Spotify at all.
+            orchestrator.refresh()
             val sessionCommands =
                 MediaSession.ConnectionResult.DEFAULT_SESSION_AND_LIBRARY_COMMANDS.buildUpon()
-                    .add(SessionCommand(COMMAND_CYCLE_RATE, Bundle.EMPTY))
-                    .add(SessionCommand(COMMAND_SET_RATE, Bundle.EMPTY))
+                    .add(SessionCommand(COMMAND_OFFSET_MINUS, Bundle.EMPTY))
+                    .add(SessionCommand(COMMAND_OFFSET_PLUS, Bundle.EMPTY))
+                    .add(SessionCommand(COMMAND_TOGGLE_LYRICS, Bundle.EMPTY))
                     .build()
             return MediaSession.ConnectionResult.AcceptedResultBuilder(session, controller)
                 .setAvailableSessionCommands(sessionCommands)
-                .setCustomLayout(ImmutableList.of(cycleRateButton()))
+                .setCustomLayout(customLayout())
                 .build()
         }
 
@@ -167,24 +208,17 @@ class LyricLaneService : MediaLibraryService() {
             controller: MediaSession.ControllerInfo,
             customCommand: SessionCommand,
             args: Bundle,
-        ): ListenableFuture<SessionResult> = when (customCommand.customAction) {
-            COMMAND_CYCLE_RATE -> {
-                setRate(rate.next())
-                Futures.immediateFuture(SessionResult(SessionResult.RESULT_SUCCESS))
+        ): ListenableFuture<SessionResult> {
+            when (customCommand.customAction) {
+                COMMAND_OFFSET_MINUS -> orchestrator.nudgeOffset(-SettingsStore.OFFSET_STEP_MS)
+                COMMAND_OFFSET_PLUS -> orchestrator.nudgeOffset(SettingsStore.OFFSET_STEP_MS)
+                COMMAND_TOGGLE_LYRICS -> orchestrator.toggleLyrics()
+                else -> return Futures.immediateFuture(
+                    SessionResult(SessionResult.RESULT_ERROR_NOT_SUPPORTED)
+                )
             }
-
-            COMMAND_SET_RATE -> {
-                val name = args.getString(ARG_RATE_NAME)
-                val requested = TickerRate.entries.firstOrNull { it.name == name }
-                if (requested == null) {
-                    Futures.immediateFuture(SessionResult(SessionResult.RESULT_ERROR_BAD_VALUE))
-                } else {
-                    setRate(requested)
-                    Futures.immediateFuture(SessionResult(SessionResult.RESULT_SUCCESS))
-                }
-            }
-
-            else -> Futures.immediateFuture(SessionResult(SessionResult.RESULT_ERROR_NOT_SUPPORTED))
+            librarySession?.setCustomLayout(customLayout())
+            return Futures.immediateFuture(SessionResult(SessionResult.RESULT_SUCCESS))
         }
 
         override fun onGetLibraryRoot(
@@ -225,15 +259,17 @@ class LyricLaneService : MediaLibraryService() {
         }
 
         /**
-         * Tapping the single browse entry should not change what we show — we
-         * only ever mirror Spotify — so resolve it to the item we already have.
+         * The browse tree has one entry and we never change what we mirror, so a
+         * tap on it means "resume Spotify" rather than "play this".
          */
         override fun onAddMediaItems(
             mediaSession: MediaSession,
             controller: MediaSession.ControllerInfo,
             mediaItems: MutableList<MediaItem>,
-        ): ListenableFuture<MutableList<MediaItem>> =
-            Futures.immediateFuture(mutableListOf(nowPlayingItem()))
+        ): ListenableFuture<MutableList<MediaItem>> {
+            orchestrator.play()
+            return Futures.immediateFuture(mutableListOf(nowPlayingItem()))
+        }
     }
 
     private fun rootItem(): MediaItem = MediaItem.Builder()
@@ -260,35 +296,12 @@ class LyricLaneService : MediaLibraryService() {
         )
         .build()
 
-    /**
-     * A flat placeholder cover so the dashboard card is laid out the same way it
-     * will be once Spotify's real artwork is forwarded in Phase 1.
-     */
-    private fun placeholderArtworkPng(): ByteArray {
-        val size = 512
-        val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
-        val canvas = Canvas(bitmap)
-        canvas.drawColor(Color.rgb(0x12, 0x14, 0x1A))
-        val paint = Paint().apply {
-            isAntiAlias = true
-            color = Color.rgb(0x1D, 0xB9, 0x54)
-        }
-        canvas.drawCircle(size / 2f, size / 2f, size / 3f, paint)
-        paint.color = Color.rgb(0x12, 0x14, 0x1A)
-        canvas.drawCircle(size / 2f, size / 2f, size / 9f, paint)
-        return ByteArrayOutputStream().use { out ->
-            bitmap.compress(Bitmap.CompressFormat.PNG, 100, out)
-            bitmap.recycle()
-            out.toByteArray()
-        }
-    }
-
     companion object {
         private const val TAG = "LyricLane"
-        private const val SESSION_ID = "LyricLane"
+        private const val IDLE_UID = "lyriclane_idle"
         const val ROOT_ID = "lyriclane_root"
-        const val COMMAND_CYCLE_RATE = "dev.lyriclane.CYCLE_RATE"
-        const val COMMAND_SET_RATE = "dev.lyriclane.SET_RATE"
-        const val ARG_RATE_NAME = "rate_name"
+        const val COMMAND_OFFSET_MINUS = "dev.lyriclane.OFFSET_MINUS"
+        const val COMMAND_OFFSET_PLUS = "dev.lyriclane.OFFSET_PLUS"
+        const val COMMAND_TOGGLE_LYRICS = "dev.lyriclane.TOGGLE_LYRICS"
     }
 }

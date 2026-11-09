@@ -23,3 +23,6 @@ dependencyResolutionManagement {
 rootProject.name = "LyricLane"
 
 include(":app")
+include(":core:spotify")
+include(":core:lyrics")
+include(":core:media")
