@@ -13,15 +13,15 @@ class NeteaseCreditsTest {
             [00:00.00] 作词 : Benj Pasek/Justin Paul
             [00:01.00] 作曲 : Benj Pasek/Justin Paul
             [00:02.00] 编曲 : Someone
-            [00:13.99]I close my eyes and I can see
-            [00:17.28]The world that's waiting up for me
+            [00:13.99]first line of the placeholder song
+            [00:17.28]second line of the placeholder song
         """.trimIndent()
 
         val cleaned = NeteaseSource.stripCredits(lrc)
 
         assertThat(cleaned).doesNotContain("作词")
         assertThat(cleaned).doesNotContain("编曲")
-        assertThat(cleaned).contains("I close my eyes and I can see")
+        assertThat(cleaned).contains("first line of the placeholder song")
         assertThat(LrcParser.parse(cleaned).lines).hasSize(2)
     }
 

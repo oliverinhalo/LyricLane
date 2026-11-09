@@ -4,44 +4,44 @@ import com.google.common.truth.Truth.assertThat
 import org.junit.Test
 
 /**
- * Sample taken verbatim from LRCLIB's `/api/get` response for "A Million
- * Dreams", which is the format this parser exists for.
+ * Shaped exactly like LRCLIB's `/api/get` response, with placeholder words in
+ * place of anyone's lyrics: the structure is what this parser exists for.
  */
 class LyricsFileParserTest {
 
     private val document = """
         version: '1.0'
         metadata:
-          title: A Million Dreams
-          artist: Ziv Zaifman
-          album: The Greatest Showman (Original Motion Picture Soundtrack)
+          title: Placeholder Song
+          artist: Placeholder Artist
+          album: Placeholder Album
           duration_ms: 269000
           instrumental: false
           language: en
         lines:
-        - text: I close my eyes and I can see
+        - text: first line of the placeholder song
           start_ms: 13960
           end_ms: 16560
           words:
-          - text: 'I '
+          - text: 'first '
             start_ms: 13960
-          - text: 'close '
+          - text: 'line '
             start_ms: 14090
-          - text: see
+          - text: song
             start_ms: 16220
-        - text: A world that's waiting up for me
+        - text: second line of the placeholder song
           start_ms: 17120
           end_ms: 19690
           words:
-          - text: 'A '
+          - text: 'second '
             start_ms: 17120
-          - text: me
+          - text: song
             start_ms: 19350
-        - text: That I call my own
+        - text: third placeholder line
           start_ms: 21020
           end_ms: 22870
           words:
-          - text: 'That '
+          - text: 'third '
             start_ms: 21020
     """.trimIndent()
 
@@ -51,11 +51,21 @@ class LyricsFileParserTest {
 
         assertThat(lines).isNotNull()
         assertThat(lines!!).hasSize(3)
-        assertThat(lines[0].text).isEqualTo("I close my eyes and I can see")
+        assertThat(lines[0].text).isEqualTo("first line of the placeholder song")
         assertThat(lines[0].timeMs).isEqualTo(13_960)
         assertThat(lines[0].endMs).isEqualTo(16_560)
-        assertThat(lines[2].text).isEqualTo("That I call my own")
+        assertThat(lines[2].text).isEqualTo("third placeholder line")
         assertThat(lines[2].endMs).isEqualTo(22_870)
+    }
+
+    @Test
+    fun `per-word timings are kept on the line`() {
+        val lines = LyricsFileParser.parse(document)!!
+
+        assertThat(lines[0].words.map { it.text }).containsExactly("first", "line", "song").inOrder()
+        assertThat(lines[0].words.map { it.timeMs })
+            .containsExactly(13_960L, 14_090L, 16_220L).inOrder()
+        assertThat(lines[2].words.single().text).isEqualTo("third")
     }
 
     @Test
@@ -64,7 +74,7 @@ class LyricsFileParserTest {
 
         // Three sung lines, not the dozen words nested under them.
         assertThat(lines).hasSize(3)
-        assertThat(lines.map { it.text }).doesNotContain("close ")
+        assertThat(lines.map { it.text }).doesNotContain("line ")
         assertThat(lines.map { it.timeMs }).doesNotContain(14_090L)
     }
 
@@ -81,14 +91,14 @@ class LyricsFileParserTest {
     fun `single-quoted values are unquoted`() {
         val quoted = """
             lines:
-            - text: 'that''s how it goes'
+            - text: 'it''s a quoted value'
               start_ms: 1000
               end_ms: 2000
         """.trimIndent()
 
         val lines = LyricsFileParser.parse(quoted)!!
 
-        assertThat(lines.single().text).isEqualTo("that's how it goes")
+        assertThat(lines.single().text).isEqualTo("it's a quoted value")
     }
 
     @Test

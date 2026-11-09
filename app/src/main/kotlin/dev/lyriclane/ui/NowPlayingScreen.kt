@@ -276,8 +276,14 @@ private fun Message(modifier: Modifier = Modifier, heading: String, body: String
 
 private fun statusLine(lyrics: LyricsResult, playing: Boolean, lineCount: Int): String {
     val state = when (lyrics) {
-        is LyricsResult.Synced ->
-            "synced · $lineCount lines" + if (lyrics.fromCache) " · cached" else ""
+        is LyricsResult.Synced -> buildString {
+            append(lyrics.source.label)
+            append(" · $lineCount lines")
+            // Sources that know when each line *ends* are what make the car's
+            // look-ahead during instrumental breaks possible.
+            if (lyrics.hasLineEndTimes) append(" · line end times")
+            if (lyrics.fromCache) append(" · cached")
+        }
 
         is LyricsResult.PlainOnly -> "not synced"
         LyricsResult.Instrumental -> "instrumental"

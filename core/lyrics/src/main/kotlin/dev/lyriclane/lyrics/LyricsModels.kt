@@ -24,6 +24,9 @@ data class TrackIdentity(
     val durationSeconds: Int get() = ((durationMs + 500) / 1000).toInt()
 }
 
+/** One word and the moment it is sung. Only some sources provide these. */
+data class LyricWord(val timeMs: Long, val text: String)
+
 /**
  * One timed line. [text] is empty for a gap, which the UI renders as a rest.
  *
@@ -31,8 +34,17 @@ data class TrackIdentity(
  * only says when each line *starts* — but LRCLIB's richer lyrics file does, and
  * knowing it is what lets the car show the next line during an instrumental
  * break instead of leaving the last one sitting there.
+ *
+ * [words] carries per-word timings where the source has them. They are not
+ * displayed — a car gets whole lines — but they decide exactly when a line too
+ * long for the screen hands over to its next piece.
  */
-data class LyricLine(val timeMs: Long, val text: String, val endMs: Long? = null) {
+data class LyricLine(
+    val timeMs: Long,
+    val text: String,
+    val endMs: Long? = null,
+    val words: List<LyricWord> = emptyList(),
+) {
     val isGap: Boolean get() = text.isBlank()
 
     /**

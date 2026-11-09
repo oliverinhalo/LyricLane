@@ -153,8 +153,7 @@ object CarDisplayFormatter {
 
     /**
      * Truncates at a word boundary where one is close to the limit, so the car
-     * shows "Is this the real life, is this just…" rather than cutting
-     * mid-word.
+     * shows "a long line of words cut short…" rather than cutting mid-word.
      */
     fun truncate(text: String, maxChars: Int = MAX_CHARS): String {
         val trimmed = text.trim()

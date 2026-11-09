@@ -256,19 +256,38 @@ Tried in order, stopping as soon as one has timed lyrics for a recording of the
 right length:
 
 1. **LRCLIB word-timed** — some entries carry a structured document with
-   per-line *end* times, not just start times. These are preferred: knowing
-   when a line stops is what lets the car show the next line during an
-   instrumental break instead of leaving the last one sitting there.
+   per-line *end* times and **per-word** timings. These are preferred for two
+   reasons. Knowing when a line stops is what lets the car show the next line
+   during an instrumental break instead of leaving the last one sitting there.
+   And when a line is too long for the screen, its pieces hand over on the beat
+   the next word is actually sung, rather than splitting the window evenly and
+   drifting through any held note. Coverage is partial — common on recent pop,
+   rarer on older catalogue — and the app falls back to ordinary LRC without
+   complaint.
 2. **LRCLIB** — ordinary LRC.
 3. **NetEase Cloud Music** — public endpoints, no key. Often has a well-timed
    LRC for tracks LRCLIB has missed. Its files open with credit lines timed at
    00:00 (lyricist, composer); those are stripped.
 
-**Not Spotify's own lyrics.** They are licensed from Musixmatch and reachable
-only through an internal endpoint that needs a logged-in Spotify session token.
-There is no public API for them, they are not in the MediaSession, and using the
-private endpoint would mean impersonating the Spotify client. The brief for this
-project also ruled out a Spotify login.
+**Not Spotify's own lyrics.** Spotify has no lyrics API, official or otherwise.
+They are licensed from Musixmatch and reachable only through an internal
+endpoint that expects a token lifted from a logged-in session and headers
+spoofed to look like Spotify's own client — circumventing an access control to
+pull third-party licensed content into an unlicensed app, and fragile enough to
+break whenever Spotify changes the scheme.
+
+Reading them off the screen instead does not work either, and not only on
+policy grounds: Android does not render the UI of a backgrounded app. While
+you are driving, Spotify is in the background with no lyrics view drawn, so an
+accessibility scraper would have nothing to read. It would also require
+granting an app permission to read every screen on the phone, banking and
+messaging included, which is a bad trade for song lyrics.
+
+The closest legitimate equivalent is LRCLIB's word-timed data above, which is
+the same class of per-word timing — and on tracks that have it, the timing is
+as tight as anything Spotify shows. **Musixmatch itself has a developer API**;
+if you get your own key I can add it as a source, on your terms rather than by
+pretending to be someone else's client.
 
 ### What you should see in each situation
 

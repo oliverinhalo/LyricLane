@@ -34,6 +34,15 @@ object LyricTimeline {
                 continue
             }
 
+            // Where the source timed each word, split on the real moment the
+            // singer reaches the next piece rather than guessing at an even
+            // share of the window.
+            val timed = splitOnWordTimes(line, maxChars)
+            if (timed != null) {
+                out += timed
+                continue
+            }
+
             val chunks = splitAtWords(line.text, maxChars)
             // Only split when every chunk gets a readable slot.
             if (chunks.size < 2 || window < chunks.size * MIN_CHUNK_MS) {
@@ -57,6 +66,56 @@ object LyricTimeline {
             }
         }
         return out
+    }
+
+    /**
+     * Splits a long line using its own per-word timings, so each piece appears
+     * exactly when its first word is sung. Null when the line carries no word
+     * timings, or they do not cover its text, in which case the caller falls
+     * back to dividing the window evenly.
+     */
+    fun splitOnWordTimes(line: LyricLine, maxChars: Int): List<LyricLine>? {
+        val words = line.words.filter { it.text.isNotBlank() }
+        if (words.size < 2) return null
+
+        val pieces = ArrayList<LyricLine>()
+        val current = StringBuilder()
+        var pieceStartMs = words.first().timeMs
+
+        for (word in words) {
+            val token = word.text.trim()
+            when {
+                current.isEmpty() -> {
+                    current.append(token)
+                    pieceStartMs = word.timeMs
+                }
+
+                current.length + 1 + token.length <= maxChars ->
+                    current.append(' ').append(token)
+
+                else -> {
+                    // This word starts the next piece, so the one before it
+                    // ends here.
+                    pieces += LyricLine(
+                        timeMs = pieceStartMs,
+                        text = current.toString(),
+                        endMs = word.timeMs,
+                    )
+                    current.setLength(0)
+                    current.append(token)
+                    pieceStartMs = word.timeMs
+                }
+            }
+        }
+        if (current.isNotEmpty()) {
+            pieces += LyricLine(pieceStartMs, current.toString(), endMs = line.endMs)
+        }
+
+        // One piece means it fitted after all; nothing was gained.
+        if (pieces.size < 2) return null
+        // Word timings must run forwards, or the timeline would go backwards.
+        if (pieces.zipWithNext().any { (a, b) -> b.timeMs < a.timeMs }) return null
+        return pieces
     }
 
     /**

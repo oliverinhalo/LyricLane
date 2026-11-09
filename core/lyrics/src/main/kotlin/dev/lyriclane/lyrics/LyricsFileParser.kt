@@ -15,11 +15,11 @@ package dev.lyriclane.lyrics
  *
  * ```
  * lines:
- * - text: I close my eyes and I can see
+ * - text: the words of one line
  *   start_ms: 13960
  *   end_ms: 16560
  *   words:
- *   - text: 'I '
+ *   - text: 'the '
  *     start_ms: 13960
  * ```
  *
@@ -39,9 +39,19 @@ object LyricsFileParser {
         var text: String? = null
         var startMs: Long? = null
         var endMs: Long? = null
+        var words = ArrayList<LyricWord>()
         var inWords = false
+        var pendingWord: String? = null
 
-        fun flush() {
+        fun flushWord(timeMs: Long?) {
+            // The format pads words with the trailing space that joins them;
+            // callers want the word itself.
+            val word = pendingWord?.trim()
+            if (!word.isNullOrEmpty() && timeMs != null) words += LyricWord(timeMs, word)
+            pendingWord = null
+        }
+
+        fun flushLine() {
             val currentText = text
             val currentStart = startMs
             if (currentText != null && currentStart != null) {
@@ -49,11 +59,13 @@ object LyricsFileParser {
                     timeMs = currentStart,
                     text = currentText.trim(),
                     endMs = endMs?.takeIf { it > currentStart },
+                    words = words.toList(),
                 )
             }
             text = null
             startMs = null
             endMs = null
+            words = ArrayList()
         }
 
         for (raw in document.lineSequence()) {
@@ -64,8 +76,9 @@ object LyricsFileParser {
             when {
                 // A new line entry: column 0, "- text: ...".
                 indent == 0 && content.startsWith(LINE_ENTRY_PREFIX) -> {
-                    flush()
+                    flushLine()
                     inWords = false
+                    pendingWord = null
                     text = unquote(content.removePrefix(LINE_ENTRY_PREFIX).trim())
                 }
 
@@ -78,11 +91,18 @@ object LyricsFileParser {
                 indent == 2 && !inWords && content.startsWith("end_ms:") ->
                     endMs = content.removePrefix("end_ms:").trim().toLongOrNull()
 
-                // Anything deeper belongs to a word; ignore it.
+                // Word entries: "- text:" at column 2 under words:, with their
+                // own start_ms one level deeper.
+                inWords && indent == 2 && content.startsWith(LINE_ENTRY_PREFIX) ->
+                    pendingWord = unquote(content.removePrefix(LINE_ENTRY_PREFIX).trim())
+
+                inWords && indent == 4 && content.startsWith("start_ms:") ->
+                    flushWord(content.removePrefix("start_ms:").trim().toLongOrNull())
+
                 else -> Unit
             }
         }
-        flush()
+        flushLine()
 
         if (lines.isEmpty()) return null
         if (lines.none { it.text.isNotBlank() }) return null

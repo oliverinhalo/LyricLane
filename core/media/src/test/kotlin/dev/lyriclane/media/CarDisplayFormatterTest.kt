@@ -83,11 +83,11 @@ class CarDisplayFormatterTest {
         val display = CarDisplayFormatter.format(
             spotify = playing,
             lyrics = synced,
-            frame = frame("Is this the real life?", "Is this just fantasy?"),
+            frame = frame("the current line", "the line after it"),
         )
 
-        assertThat(display.primary).isEqualTo("Is this the real life?")
-        assertThat(display.secondary).isEqualTo("Is this just fantasy?")
+        assertThat(display.primary).isEqualTo("the current line")
+        assertThat(display.secondary).isEqualTo("the line after it")
     }
 
     @Test
@@ -95,11 +95,11 @@ class CarDisplayFormatterTest {
         val display = CarDisplayFormatter.format(
             spotify = playing,
             lyrics = synced,
-            frame = frame("Is this the real life?", "Is this just fantasy?"),
+            frame = frame("the current line", "the line after it"),
             secondaryLine = SecondaryLine.SONG_INFO,
         )
 
-        assertThat(display.primary).isEqualTo("Is this the real life?")
+        assertThat(display.primary).isEqualTo("the current line")
         assertThat(display.secondary).contains("Bohemian Rhapsody")
         assertThat(display.secondary).contains("Queen")
     }
@@ -218,7 +218,7 @@ class CarDisplayFormatterTest {
 
     @Test
     fun `long lines are truncated at a word boundary`() {
-        val long = "Is this the real life, is this just fantasy, caught in a landslide forever"
+        val long = "a line of placeholder text long enough that it has to be cut short"
 
         val truncated = CarDisplayFormatter.truncate(long, maxChars = 30)
 

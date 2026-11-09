@@ -52,11 +52,11 @@ class LrcParserTest {
             [al:A Night at the Opera]
             [by:someone]
             [length:05:55]
-            [00:00.15] Is this the real life
+            [00:00.15] first placeholder line
             """.trimIndent()
         )
 
-        assertThat(parsed.lines).containsExactly(LyricLine(150, "Is this the real life"))
+        assertThat(parsed.lines).containsExactly(LyricLine(150, "first placeholder line"))
     }
 
     @Test
@@ -147,19 +147,20 @@ class LrcParserTest {
     }
 
     @Test
-    fun `real lrclib payload parses`() {
-        // Trimmed from the live /api/get response for Bohemian Rhapsody.
+    fun `a payload shaped like a real lrclib reply parses`() {
+        // Same timestamp style and spacing LRCLIB returns, with placeholder
+        // words: the format is what is under test, not anyone's lyrics.
         val lrc = """
-            [00:00.15] Is this the real life? Is this just fantasy?
-            [00:07.13] Caught in a landslide, no escape from reality
-            [00:14.77] Open your eyes, look up to the skies and see
-            [00:25.37] I'm just a poor boy, I need no sympathy
+            [00:00.15] first line of the placeholder song
+            [00:07.13] second line, a little longer than the first
+            [00:14.77] third line here
+            [00:25.37] fourth and final line of the sample
         """.trimIndent()
 
         val parsed = LrcParser.parse(lrc)
 
         assertThat(parsed.lines).hasSize(4)
         assertThat(parsed.lines.first().timeMs).isEqualTo(150)
-        assertThat(parsed.lines.last().text).isEqualTo("I'm just a poor boy, I need no sympathy")
+        assertThat(parsed.lines.last().text).isEqualTo("fourth and final line of the sample")
     }
 }
