@@ -20,6 +20,18 @@ object LyricsMatcher {
 
     private const val MIN_TEXT_SIMILARITY = 0.34
 
+    /**
+     * True when a candidate is good enough that there is no point asking
+     * another source: the same recording length, with timed lyrics, under a
+     * title that plainly matches.
+     */
+    fun isConfident(identity: TrackIdentity, candidate: LyricsCandidate): Boolean {
+        if (!candidate.hasSynced) return false
+        val deltaMs = abs((candidate.durationSeconds * 1000.0) - identity.durationMs)
+        if (deltaMs > DURATION_TOLERANCE_MS) return false
+        return TextNormalizer.similarity(identity.title, candidate.trackName) >= 0.6
+    }
+
     fun bestMatch(
         identity: TrackIdentity,
         candidates: List<LyricsCandidate>,
@@ -53,6 +65,9 @@ object LyricsMatcher {
         score += artistSimilarity * 15.0
         // Timed lyrics are the entire point; an untimed match is a consolation.
         if (candidate.hasSynced) score += 25.0
+        // Entries that know where each line *ends*, not just where it starts,
+        // sync visibly better, so prefer them over a plain LRC of the same song.
+        if (candidate.hasLineEndTimes) score += 12.0
         if (candidate.instrumental) score -= 5.0
         if (identity.album != null && candidate.albumName != null) {
             score += TextNormalizer.similarity(identity.album, candidate.albumName) * 5.0

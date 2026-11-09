@@ -18,10 +18,15 @@ import kotlinx.coroutines.flow.asStateFlow
 class SettingsStore @Inject constructor(@ApplicationContext context: Context) {
 
     data class Settings(
-        val subtitleMode: SubtitleMode = SubtitleMode.NEXT_LINE,
+        val secondaryLine: SecondaryLine = SecondaryLine.NEXT_LINE,
+        val carTextSlots: CarTextSlots = CarTextSlots.SUBTITLE_IS_BIG,
         val defaultOffsetMs: Long = 0L,
         val minHoldMs: Long = MetadataPacing.DEFAULT_MIN_INTERVAL_MS,
         val lyricsEnabled: Boolean = true,
+        val showArtwork: Boolean = true,
+        val packTwoLines: Boolean = false,
+        /** Multiplier on the lyric text size on the phone screen. */
+        val lyricTextScale: Float = DEFAULT_TEXT_SCALE,
     )
 
     private val prefs: SharedPreferences =
@@ -32,7 +37,16 @@ class SettingsStore @Inject constructor(@ApplicationContext context: Context) {
 
     val current: Settings get() = _settings.value
 
-    fun setSubtitleMode(mode: SubtitleMode) = edit { putString(KEY_SUBTITLE, mode.name) }
+    fun setSecondaryLine(mode: SecondaryLine) = edit { putString(KEY_SECONDARY, mode.name) }
+
+    fun setCarTextSlots(slots: CarTextSlots) = edit { putString(KEY_SLOTS, slots.name) }
+
+    fun setShowArtwork(show: Boolean) = edit { putBoolean(KEY_SHOW_ARTWORK, show) }
+
+    fun setPackTwoLines(pack: Boolean) = edit { putBoolean(KEY_PACK_TWO_LINES, pack) }
+
+    fun setLyricTextScale(scale: Float) =
+        edit { putFloat(KEY_TEXT_SCALE, scale.coerceIn(MIN_TEXT_SCALE, MAX_TEXT_SCALE)) }
 
     fun setDefaultOffsetMs(ms: Long) =
         edit { putLong(KEY_DEFAULT_OFFSET, ms.coerceIn(-MAX_OFFSET_MS, MAX_OFFSET_MS)) }
@@ -48,14 +62,18 @@ class SettingsStore @Inject constructor(@ApplicationContext context: Context) {
     }
 
     private fun read() = Settings(
-        subtitleMode = runCatching {
-            SubtitleMode.valueOf(
-                prefs.getString(KEY_SUBTITLE, SubtitleMode.NEXT_LINE.name)!!
-            )
-        }.getOrDefault(SubtitleMode.NEXT_LINE),
+        secondaryLine = runCatching {
+            SecondaryLine.valueOf(prefs.getString(KEY_SECONDARY, SecondaryLine.NEXT_LINE.name)!!)
+        }.getOrDefault(SecondaryLine.NEXT_LINE),
+        carTextSlots = runCatching {
+            CarTextSlots.valueOf(prefs.getString(KEY_SLOTS, CarTextSlots.SUBTITLE_IS_BIG.name)!!)
+        }.getOrDefault(CarTextSlots.SUBTITLE_IS_BIG),
         defaultOffsetMs = prefs.getLong(KEY_DEFAULT_OFFSET, 0L),
         minHoldMs = prefs.getLong(KEY_MIN_HOLD, MetadataPacing.DEFAULT_MIN_INTERVAL_MS),
         lyricsEnabled = prefs.getBoolean(KEY_LYRICS_ON, true),
+        showArtwork = prefs.getBoolean(KEY_SHOW_ARTWORK, true),
+        packTwoLines = prefs.getBoolean(KEY_PACK_TWO_LINES, false),
+        lyricTextScale = prefs.getFloat(KEY_TEXT_SCALE, DEFAULT_TEXT_SCALE),
     )
 
     companion object {
@@ -65,9 +83,18 @@ class SettingsStore @Inject constructor(@ApplicationContext context: Context) {
         /** The step the car's Offset +/- actions move by. */
         const val OFFSET_STEP_MS = 250L
 
-        private const val KEY_SUBTITLE = "subtitle_mode"
+        /** Lyrics are the point of the app, so they start comfortably large. */
+        const val DEFAULT_TEXT_SCALE = 1.45f
+        const val MIN_TEXT_SCALE = 0.8f
+        const val MAX_TEXT_SCALE = 2.6f
+
+        private const val KEY_SECONDARY = "secondary_line"
+        private const val KEY_SLOTS = "car_text_slots"
         private const val KEY_DEFAULT_OFFSET = "default_offset_ms"
         private const val KEY_MIN_HOLD = "min_hold_ms"
         private const val KEY_LYRICS_ON = "lyrics_enabled"
+        private const val KEY_SHOW_ARTWORK = "show_artwork"
+        private const val KEY_PACK_TWO_LINES = "pack_two_lines"
+        private const val KEY_TEXT_SCALE = "lyric_text_scale"
     }
 }

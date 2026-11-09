@@ -42,6 +42,7 @@ fun NowPlayingScreen(viewModel: NowPlayingViewModel) {
     val frame by viewModel.frame.collectAsStateWithLifecycle()
     val display by viewModel.display.collectAsStateWithLifecycle()
     val offsetMs by viewModel.offsetMs.collectAsStateWithLifecycle()
+    val settings by viewModel.settings.collectAsStateWithLifecycle()
     var pickerOpen by remember { mutableStateOf(false) }
 
     Column(Modifier.fillMaxSize()) {
@@ -79,15 +80,17 @@ fun NowPlayingScreen(viewModel: NowPlayingViewModel) {
             Column(Modifier.padding(12.dp)) {
                 Text("On the car screen", style = MaterialTheme.typography.labelSmall)
                 Spacer(Modifier.height(4.dp))
+                // Shown the way the car shows it: the big line first.
                 Text(
-                    display.title,
+                    display.primary,
                     style = MaterialTheme.typography.titleMedium,
-                    maxLines = 1,
+                    maxLines = 2,
                 )
                 Text(
-                    display.subtitle,
+                    display.secondary,
                     style = MaterialTheme.typography.bodySmall,
                     maxLines = 1,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
         }
@@ -123,6 +126,7 @@ fun NowPlayingScreen(viewModel: NowPlayingViewModel) {
         LyricsPane(
             lyrics = lyrics,
             activeIndex = frame.lineIndex,
+            textScale = settings.lyricTextScale,
             modifier = Modifier.weight(1f),
         )
     }
@@ -171,17 +175,26 @@ private fun OffsetRow(offsetMs: Long, onNudge: (Long) -> Unit, onReset: () -> Un
 }
 
 @Composable
-private fun LyricsPane(lyrics: LyricsResult, activeIndex: Int, modifier: Modifier = Modifier) {
+private fun LyricsPane(
+    lyrics: LyricsResult,
+    activeIndex: Int,
+    textScale: Float,
+    modifier: Modifier = Modifier,
+) {
     when (lyrics) {
         is LyricsResult.Synced -> {
             val listState = rememberLazyListState()
             LaunchedEffect(activeIndex) {
                 if (activeIndex >= 0) {
-                    // Keep the active line a couple of rows down from the top so
-                    // the lines ahead are readable.
-                    listState.animateScrollToItem((activeIndex - 2).coerceAtLeast(0))
+                    // Keep a few already-sung lines on screen above the active
+                    // one, so there is something to orient by when the timing
+                    // is slightly off.
+                    listState.animateScrollToItem(
+                        (activeIndex - LINES_ABOVE_ACTIVE).coerceAtLeast(0)
+                    )
                 }
             }
+            val base = MaterialTheme.typography.headlineSmall
             LazyColumn(
                 state = listState,
                 modifier = modifier.fillMaxWidth(),
@@ -192,21 +205,24 @@ private fun LyricsPane(lyrics: LyricsResult, activeIndex: Int, modifier: Modifie
             ) {
                 itemsIndexed(lyrics.lines) { index, line ->
                     val isActive = index == activeIndex
+                    // Every line is the same size, so nothing jumps as the song
+                    // moves on; the active line is told apart by weight and
+                    // brightness. Inactive lines stay bright enough to read
+                    // ahead comfortably rather than fading to grey.
                     val color by animateColorAsState(
-                        if (isActive) {
-                            MaterialTheme.colorScheme.primary
+                        targetValue = if (isActive) {
+                            MaterialTheme.colorScheme.onSurface
                         } else {
-                            MaterialTheme.colorScheme.onSurfaceVariant
+                            MaterialTheme.colorScheme.onSurface.copy(alpha = 0.72f)
                         },
                         label = "lyricColor",
                     )
                     Text(
                         text = if (line.isGap) "♪" else line.text,
-                        style = if (isActive) {
-                            MaterialTheme.typography.titleMedium
-                        } else {
-                            MaterialTheme.typography.bodyMedium
-                        },
+                        style = base.copy(
+                            fontSize = base.fontSize * textScale,
+                            lineHeight = base.lineHeight * textScale,
+                        ),
                         fontWeight = if (isActive) FontWeight.Bold else FontWeight.Normal,
                         color = color,
                         modifier = Modifier.padding(vertical = 6.dp),
@@ -272,6 +288,9 @@ private fun statusLine(lyrics: LyricsResult, playing: Boolean, lineCount: Int): 
     }
     return if (playing) "playing · $state" else "paused · $state"
 }
+
+/** How many already-sung lines stay on screen above the active one. */
+private const val LINES_ABOVE_ACTIVE = 3
 
 private fun formatOffset(offsetMs: Long): String = when {
     offsetMs == 0L -> "in sync"

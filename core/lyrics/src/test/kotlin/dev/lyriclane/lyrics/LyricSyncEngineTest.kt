@@ -257,3 +257,107 @@ class LyricSyncEngineTest {
         engine.release()
     }
 }
+
+/**
+ * Gap behaviour, which only exists for lyrics that carry line end times — the
+ * LRCLIB word-synced documents. Plain LRC cannot know when a line stops.
+ */
+@OptIn(ExperimentalCoroutinesApi::class)
+class LyricSyncEngineGapTest {
+
+    private val timed = listOf(
+        LyricLine(timeMs = 1_000, text = "first", endMs = 3_000),
+        LyricLine(timeMs = 10_000, text = "second", endMs = 12_000),
+    )
+
+    private fun TestScope.engine() =
+        LyricSyncEngine(this, TimeSource { testScheduler.currentTime })
+
+    private fun TestScope.playing(positionMs: Long) = PlaybackSnapshot(
+        isPlaying = true,
+        positionMs = positionMs,
+        speed = 1f,
+        atElapsedRealtimeMs = testScheduler.currentTime,
+    )
+
+    @Test
+    fun `a line that is still being sung is not a gap`() = runTest {
+        val engine = engine()
+        engine.setTimeline(timed)
+        engine.setPlayback(playing(2_000))
+        runCurrent()
+
+        assertThat(engine.frame.value.current?.text).isEqualTo("first")
+        assertThat(engine.frame.value.inGap).isFalse()
+        engine.release()
+    }
+
+    @Test
+    fun `the engine wakes when a line ends, not only when the next starts`() = runTest {
+        val engine = engine()
+        engine.setTimeline(timed)
+        engine.setPlayback(playing(2_000))
+        runCurrent()
+        assertThat(engine.frame.value.inGap).isFalse()
+
+        // The first line ends at 3 s; the next does not start until 10 s.
+        advanceTimeBy(1_100)
+        runCurrent()
+
+        assertThat(engine.frame.value.inGap).isTrue()
+        assertThat(engine.frame.value.current?.text).isEqualTo("first")
+        assertThat(engine.frame.value.next?.text).isEqualTo("second")
+        engine.release()
+    }
+
+    @Test
+    fun `the gap clears when the next line starts`() = runTest {
+        val engine = engine()
+        engine.setTimeline(timed)
+        engine.setPlayback(playing(4_000))
+        runCurrent()
+        assertThat(engine.frame.value.inGap).isTrue()
+
+        advanceTimeBy(6_100)
+        runCurrent()
+
+        assertThat(engine.frame.value.current?.text).isEqualTo("second")
+        assertThat(engine.frame.value.inGap).isFalse()
+        engine.release()
+    }
+
+    @Test
+    fun `lyrics without end times never report a gap`() = runTest {
+        val engine = engine()
+        engine.setTimeline(listOf(LyricLine(1_000, "a"), LyricLine(10_000, "b")))
+        engine.setPlayback(playing(5_000))
+        runCurrent()
+
+        assertThat(engine.frame.value.current?.text).isEqualTo("a")
+        assertThat(engine.frame.value.inGap).isFalse()
+        engine.release()
+    }
+
+    @Test
+    fun `next and previous skip blank gap markers`() = runTest {
+        val engine = engine()
+        engine.setTimeline(
+            listOf(
+                LyricLine(0, "one"),
+                LyricLine(1_000, "two"),
+                LyricLine(2_000, ""),
+                LyricLine(3_000, "three"),
+                LyricLine(4_000, "four"),
+            )
+        )
+        engine.setPlayback(playing(1_500))
+        runCurrent()
+
+        val frame = engine.frame.value
+        assertThat(frame.current?.text).isEqualTo("two")
+        assertThat(frame.next?.text).isEqualTo("three")
+        assertThat(frame.afterNext?.text).isEqualTo("four")
+        assertThat(frame.previous?.text).isEqualTo("one")
+        engine.release()
+    }
+}

@@ -56,7 +56,15 @@ class LyricSyncEngine(
         val lineIndex: Int = NO_LINE,
         val current: LyricLine? = null,
         val next: LyricLine? = null,
+        val afterNext: LyricLine? = null,
+        val previous: LyricLine? = null,
         val lineCount: Int = 0,
+        /**
+         * True when the current line has finished and the next has not started
+         * — an instrumental break. Only ever true for lyrics that carry line
+         * end times; plain LRC cannot know.
+         */
+        val inGap: Boolean = false,
     ) {
         val hasLyrics: Boolean get() = lineCount > 0
     }
@@ -108,16 +116,27 @@ class LyricSyncEngine(
                 val now = timeSource.elapsedRealtimeMs()
                 val position = snapshot.positionMsAt(now) + offsetMs
                 val index = LyricTimeline.indexAt(lines, position)
+                val current = lines.getOrNull(index)
                 _frame.value = Frame(
                     lineIndex = index,
-                    current = lines.getOrNull(index),
-                    next = lines.getOrNull(index + 1),
+                    current = current,
+                    next = LyricTimeline.nextSung(lines, index),
+                    afterNext = LyricTimeline.nextSung(lines, index, skip = 1),
+                    previous = LyricTimeline.previousSung(lines, index),
                     lineCount = lines.size,
+                    inGap = current?.hasEndedBy(position) == true,
                 )
                 if (!snapshot.isPlaying) return@launch
-                val next = lines.getOrNull(index + 1) ?: return@launch
+
                 val speed = if (snapshot.speed > 0f) snapshot.speed else 1f
-                val waitMs = ((next.timeMs - position) / speed).toLong()
+                // Wake for whichever comes first: the next line starting, or
+                // the current one ending (which turns the display over to the
+                // heads-up for what is coming).
+                val nextStartMs = lines.getOrNull(index + 1)?.timeMs
+                val currentEndMs = current?.endMs?.takeIf { it > position }
+                val wakeAtMs = listOfNotNull(nextStartMs, currentEndMs).minOrNull()
+                    ?: return@launch
+                val waitMs = ((wakeAtMs - position) / speed).toLong()
                 delay(waitMs.coerceAtLeast(MIN_WAIT_MS))
             }
         }

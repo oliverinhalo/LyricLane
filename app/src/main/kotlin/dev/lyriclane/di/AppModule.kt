@@ -7,9 +7,12 @@ import dagger.hilt.InstallIn
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
 import dev.lyriclane.lyrics.LrclibClient
+import dev.lyriclane.lyrics.LrclibSource
 import dev.lyriclane.lyrics.LyricsDao
 import dev.lyriclane.lyrics.LyricsDatabase
 import dev.lyriclane.lyrics.LyricsRepository
+import dev.lyriclane.lyrics.LyricsSource
+import dev.lyriclane.lyrics.NeteaseSource
 import dev.lyriclane.spotify.SpotifyWatcher
 import java.util.concurrent.TimeUnit
 import javax.inject.Singleton
@@ -42,10 +45,25 @@ object AppModule {
     @Provides
     fun lyricsDao(database: LyricsDatabase): LyricsDao = database.lyricsDao()
 
+    /**
+     * Order matters: LRCLIB first because it is better curated and some of its
+     * entries carry word-level timings. NetEase is asked only when LRCLIB has
+     * nothing convincing.
+     */
     @Provides
     @Singleton
-    fun lyricsRepository(dao: LyricsDao, client: LrclibClient): LyricsRepository =
-        LyricsRepository(dao, client)
+    fun lyricsSources(
+        client: LrclibClient,
+        http: OkHttpClient,
+    ): List<@JvmSuppressWildcards LyricsSource> =
+        listOf(LrclibSource(client), NeteaseSource(http))
+
+    @Provides
+    @Singleton
+    fun lyricsRepository(
+        dao: LyricsDao,
+        sources: List<@JvmSuppressWildcards LyricsSource>,
+    ): LyricsRepository = LyricsRepository(dao, sources)
 
     @Provides
     @Singleton

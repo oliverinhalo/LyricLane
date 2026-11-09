@@ -9,8 +9,9 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import dev.lyriclane.lyrics.LyricsCandidate
 import dev.lyriclane.media.CarDisplay
 import dev.lyriclane.media.LyricLaneOrchestrator
+import dev.lyriclane.media.CarTextSlots
+import dev.lyriclane.media.SecondaryLine
 import dev.lyriclane.media.SettingsStore
-import dev.lyriclane.media.SubtitleMode
 import javax.inject.Inject
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.stateIn
@@ -56,7 +57,11 @@ class NowPlayingViewModel @Inject constructor(
     fun resetOffset() = orchestrator.setOffset(0L)
     fun retry() = orchestrator.retryCurrent()
 
-    fun setSubtitleMode(mode: SubtitleMode) = settingsStore.setSubtitleMode(mode)
+    fun setSecondaryLine(mode: SecondaryLine) = settingsStore.setSecondaryLine(mode)
+    fun setCarTextSlots(slots: CarTextSlots) = settingsStore.setCarTextSlots(slots)
+    fun setShowArtwork(show: Boolean) = settingsStore.setShowArtwork(show)
+    fun setPackTwoLines(pack: Boolean) = settingsStore.setPackTwoLines(pack)
+    fun setLyricTextScale(scale: Float) = settingsStore.setLyricTextScale(scale)
     fun setDefaultOffset(ms: Long) = settingsStore.setDefaultOffsetMs(ms)
     fun setMinHold(ms: Long) = settingsStore.setMinHoldMs(ms)
     fun setLyricsEnabled(enabled: Boolean) = settingsStore.setLyricsEnabled(enabled)

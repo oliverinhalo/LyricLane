@@ -220,12 +220,62 @@ Three custom actions appear on the now-playing screen:
 
 Offsets are saved per song, so a track you corrected once stays corrected.
 
+### What the car lets us change, and what it does not
+
+Android Auto renders the media card itself. A media app supplies metadata, not
+a layout, so these are **not ours to set** and no setting can change them:
+
+| | |
+|---|---|
+| Text size in the car | the head unit's choice |
+| Text colour | the head unit's choice |
+| Album art size | the head unit's choice |
+| Number of text lines | two |
+
+What *is* ours, and is now adjustable in Settings:
+
+- **Which line the car shows large.** Android Auto draws the **subtitle** large
+  and white, with the title small and grey above it — the opposite of what the
+  field names suggest. Until v0.3.0 the current lyric went in the title, which
+  is why it appeared small and grey. It now goes in the large slot by default;
+  if your head unit does the opposite, flip "Which line the car shows large".
+- **What the smaller line carries** — next line, previous line, or song and
+  artist. Previous line helps when the timing is drifting.
+- **Album art on or off.** The car decides how big the cover is; turning it off
+  is the only lever we have for giving the words more of the card.
+- **Two lines in one slot** (experimental). Sends the current and next line
+  together separated by a newline, in case the head unit wraps them. If yours
+  just truncates, turn it back off.
+
+On the phone, where we *do* control the layout, lyric size is a slider and
+starts at 1.45×.
+
+### Where lyrics come from
+
+Tried in order, stopping as soon as one has timed lyrics for a recording of the
+right length:
+
+1. **LRCLIB word-timed** — some entries carry a structured document with
+   per-line *end* times, not just start times. These are preferred: knowing
+   when a line stops is what lets the car show the next line during an
+   instrumental break instead of leaving the last one sitting there.
+2. **LRCLIB** — ordinary LRC.
+3. **NetEase Cloud Music** — public endpoints, no key. Often has a well-timed
+   LRC for tracks LRCLIB has missed. Its files open with credit lines timed at
+   00:00 (lyricist, composer); those are stripped.
+
+**Not Spotify's own lyrics.** They are licensed from Musixmatch and reachable
+only through an internal endpoint that needs a logged-in Spotify session token.
+There is no public API for them, they are not in the MediaSession, and using the
+private endpoint would mean impersonating the Spotify client. The brief for this
+project also ruled out a Spotify login.
+
 ### What you should see in each situation
 
 | Situation | On the car screen |
 |---|---|
 | Synced lyrics found | current line, with the next line under it |
-| Instrumental break | `♪` |
+| Instrumental break | the upcoming line, as a head start |
 | Lyrics exist but untimed | "Lyrics not synced" + song and artist |
 | No lyrics on LRCLIB | song title + "No lyrics found" |
 | Offline, nothing cached | song title + "Lyrics unavailable · offline?" |
@@ -327,9 +377,11 @@ Covering the parts where a bug is invisible until you are driving:
   lets one app read another's media session without a privileged permission.
 - **Needs "Unknown sources"** in Android Auto's developer settings, because it
   is sideloaded.
-- **Lyrics come from LRCLIB**, contributed by its community: coverage and
-  timing vary, especially outside well-known songs. Hence the per-song offset
-  and the manual picker.
+- **Lyrics are community-contributed** (LRCLIB, NetEase): coverage and timing
+  vary, especially outside well-known songs. Hence the per-song offset and the
+  manual picker.
+- **Text size, colour and album art size in the car are not settable.** Android
+  Auto draws the card; media apps supply metadata, not a layout.
 - **Timing follows Spotify's reported position**, which it publishes only when
   something changes. A head unit a few hundred milliseconds out is normal; that
   is what the offset is for.

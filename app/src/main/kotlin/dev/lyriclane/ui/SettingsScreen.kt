@@ -24,8 +24,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import dev.lyriclane.media.CarTextSlots
+import dev.lyriclane.media.SecondaryLine
 import dev.lyriclane.media.SettingsStore
-import dev.lyriclane.media.SubtitleMode
 import dev.lyriclane.spotify.NotificationAccess
 import java.util.Locale
 
@@ -40,18 +41,87 @@ fun SettingsScreen(viewModel: NowPlayingViewModel) {
             .verticalScroll(rememberScrollState())
             .padding(16.dp)
     ) {
-        Text("Second line in the car", style = MaterialTheme.typography.titleMedium)
+        Text("Lyric size on this screen", style = MaterialTheme.typography.titleMedium)
+        Text(
+            "Does not affect the car: Android Auto chooses its own text size " +
+                "and we cannot override it. Now: ${"%.2f".format(settings.lyricTextScale)}\u00d7",
+            style = MaterialTheme.typography.bodySmall,
+        )
+        Slider(
+            value = settings.lyricTextScale,
+            onValueChange = { viewModel.setLyricTextScale((it * 20).toInt() / 20f) },
+            valueRange = SettingsStore.MIN_TEXT_SCALE..SettingsStore.MAX_TEXT_SCALE,
+            steps = 35,
+        )
+
+        Spacer(Modifier.height(24.dp))
+        HorizontalDivider()
+        Spacer(Modifier.height(16.dp))
+
+        Text("Which line the car shows large", style = MaterialTheme.typography.titleMedium)
+        Text(
+            "Android Auto draws the subtitle large and the title small above it " +
+                "\u2014 the opposite of what the names suggest. If your head unit " +
+                "shows the lyric in the small grey line, switch this.",
+            style = MaterialTheme.typography.bodySmall,
+        )
         Spacer(Modifier.height(8.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            FilterChip(
-                selected = settings.subtitleMode == SubtitleMode.NEXT_LINE,
-                onClick = { viewModel.setSubtitleMode(SubtitleMode.NEXT_LINE) },
-                label = { Text("Next line") },
+            CarTextSlots.entries.forEach { slots ->
+                FilterChip(
+                    selected = settings.carTextSlots == slots,
+                    onClick = { viewModel.setCarTextSlots(slots) },
+                    label = { Text(slots.label) },
+                )
+            }
+        }
+
+        Spacer(Modifier.height(24.dp))
+        HorizontalDivider()
+        Spacer(Modifier.height(16.dp))
+
+        Text("Smaller line in the car", style = MaterialTheme.typography.titleMedium)
+        Spacer(Modifier.height(8.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            SecondaryLine.entries.forEach { mode ->
+                FilterChip(
+                    selected = settings.secondaryLine == mode,
+                    onClick = { viewModel.setSecondaryLine(mode) },
+                    label = { Text(mode.label) },
+                )
+            }
+        }
+
+        Spacer(Modifier.height(16.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text("Two lines in one slot", style = MaterialTheme.typography.titleMedium)
+                Text(
+                    "Experimental. Sends the current and next line together so the " +
+                        "car may wrap them onto two rows. Whether it does is up to the " +
+                        "head unit; if it just truncates, turn this back off.",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+            Switch(
+                checked = settings.packTwoLines,
+                onCheckedChange = viewModel::setPackTwoLines,
             )
-            FilterChip(
-                selected = settings.subtitleMode == SubtitleMode.SONG_INFO,
-                onClick = { viewModel.setSubtitleMode(SubtitleMode.SONG_INFO) },
-                label = { Text("Song and artist") },
+        }
+
+        Spacer(Modifier.height(16.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text("Album art", style = MaterialTheme.typography.titleMedium)
+                Text(
+                    "The car decides how big the cover is. Turning it off is the " +
+                        "only way to give the words more of the card.",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+            Switch(
+                checked = settings.showArtwork,
+                onCheckedChange = viewModel::setShowArtwork,
             )
         }
 
@@ -128,8 +198,8 @@ fun SettingsScreen(viewModel: NowPlayingViewModel) {
 
         Spacer(Modifier.height(32.dp))
         Text(
-            "Lyrics from lrclib.net, contributed by its community. " +
-                "LyricLane plays no audio; Spotify does.",
+            "Lyrics from lrclib.net and music.163.com, contributed by their " +
+                "communities. LyricLane plays no audio; Spotify does.",
             style = MaterialTheme.typography.bodySmall,
         )
     }

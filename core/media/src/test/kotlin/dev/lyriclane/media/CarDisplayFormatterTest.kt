@@ -37,11 +37,20 @@ class CarDisplayFormatterTest {
         ),
     )
 
-    private fun frame(current: String?, next: String?) = LyricSyncEngine.Frame(
+    private fun frame(
+        current: String?,
+        next: String?,
+        afterNext: String? = null,
+        previous: String? = null,
+        inGap: Boolean = false,
+    ) = LyricSyncEngine.Frame(
         lineIndex = if (current == null) -1 else 3,
         current = current?.let { LyricLine(1_000, it) },
         next = next?.let { LyricLine(2_000, it) },
+        afterNext = afterNext?.let { LyricLine(3_000, it) },
+        previous = previous?.let { LyricLine(500, it) },
         lineCount = 10,
+        inGap = inGap,
     )
 
     private val synced = LyricsResult.Synced(emptyList(), fromCache = false)
@@ -54,8 +63,8 @@ class CarDisplayFormatterTest {
             frame = frame(null, null),
         )
 
-        assertThat(display.title).contains("Notification access")
-        assertThat(display.subtitle).contains("phone")
+        assertThat(display.primary).contains("Notification access")
+        assertThat(display.secondary).contains("phone")
     }
 
     @Test
@@ -66,7 +75,7 @@ class CarDisplayFormatterTest {
             frame = frame(null, null),
         )
 
-        assertThat(display.title).contains("Nothing playing")
+        assertThat(display.primary).contains("Nothing playing")
     }
 
     @Test
@@ -77,8 +86,8 @@ class CarDisplayFormatterTest {
             frame = frame("Is this the real life?", "Is this just fantasy?"),
         )
 
-        assertThat(display.title).isEqualTo("Is this the real life?")
-        assertThat(display.subtitle).isEqualTo("Is this just fantasy?")
+        assertThat(display.primary).isEqualTo("Is this the real life?")
+        assertThat(display.secondary).isEqualTo("Is this just fantasy?")
     }
 
     @Test
@@ -87,52 +96,100 @@ class CarDisplayFormatterTest {
             spotify = playing,
             lyrics = synced,
             frame = frame("Is this the real life?", "Is this just fantasy?"),
-            subtitleMode = SubtitleMode.SONG_INFO,
+            secondaryLine = SecondaryLine.SONG_INFO,
         )
 
-        assertThat(display.title).isEqualTo("Is this the real life?")
-        assertThat(display.subtitle).contains("Bohemian Rhapsody")
-        assertThat(display.subtitle).contains("Queen")
+        assertThat(display.primary).isEqualTo("Is this the real life?")
+        assertThat(display.secondary).contains("Bohemian Rhapsody")
+        assertThat(display.secondary).contains("Queen")
     }
 
     @Test
-    fun `before the first line, and in a gap, a rest is shown`() {
-        val beforeStart = CarDisplayFormatter.format(playing, synced, frame(null, "first line"))
-        assertThat(beforeStart.title).isEqualTo("♪")
+    fun `before the first line the big text previews what is coming`() {
+        val display = CarDisplayFormatter.format(playing, synced, frame(null, "first line"))
 
-        val inGap = CarDisplayFormatter.format(playing, synced, frame("", "next"))
-        assertThat(inGap.title).isEqualTo("♪")
+        // Not a bare rest symbol: a driver glancing up gets a head start.
+        assertThat(display.primary).isEqualTo("first line")
     }
 
     @Test
-    fun `a gap as the next line falls back to song info`() {
+    fun `during an instrumental break the big text previews the next line`() {
+        val display = CarDisplayFormatter.format(
+            playing,
+            synced,
+            frame(
+                current = "a line that has finished",
+                next = "what comes next",
+                afterNext = "and then this",
+                inGap = true,
+            ),
+        )
+
+        assertThat(display.primary).isEqualTo("what comes next")
+        assertThat(display.secondary).isEqualTo("and then this")
+    }
+
+    @Test
+    fun `a blank gap marker is skipped rather than shown`() {
+        val display = CarDisplayFormatter.format(playing, synced, frame("", "next"))
+
+        assertThat(display.primary).isEqualTo("next")
+    }
+
+    @Test
+    fun `the smaller line can show the previous line instead`() {
+        val display = CarDisplayFormatter.format(
+            spotify = playing,
+            lyrics = synced,
+            frame = frame("current", "next", previous = "what came before"),
+            secondaryLine = SecondaryLine.PREVIOUS_LINE,
+        )
+
+        assertThat(display.primary).isEqualTo("current")
+        assertThat(display.secondary).isEqualTo("what came before")
+    }
+
+    @Test
+    fun `packing two lines puts both in the big slot`() {
+        val display = CarDisplayFormatter.format(
+            spotify = playing,
+            lyrics = synced,
+            frame = frame("current", "next"),
+            packTwoLines = true,
+        )
+
+        assertThat(display.primary).isEqualTo("current\nnext")
+    }
+
+    @Test
+    fun `a blank next line falls back to song info`() {
         val display = CarDisplayFormatter.format(playing, synced, frame("a line", ""))
 
-        assertThat(display.subtitle).contains("Bohemian Rhapsody")
+        assertThat(display.secondary).contains("Bohemian Rhapsody")
     }
 
     @Test
     fun `the last line of a song falls back to song info`() {
         val display = CarDisplayFormatter.format(playing, synced, frame("final line", null))
 
-        assertThat(display.title).isEqualTo("final line")
-        assertThat(display.subtitle).contains("Bohemian Rhapsody")
+        assertThat(display.primary).isEqualTo("final line")
+        assertThat(display.secondary).contains("Bohemian Rhapsody")
     }
 
     @Test
     fun `each lyric state has its own message`() {
         val f = frame(null, null)
 
-        assertThat(CarDisplayFormatter.format(playing, LyricsResult.Loading, f).subtitle)
+        assertThat(CarDisplayFormatter.format(playing, LyricsResult.Loading, f).secondary)
             .contains("Finding lyrics")
-        assertThat(CarDisplayFormatter.format(playing, LyricsResult.NotFound, f).subtitle)
+        assertThat(CarDisplayFormatter.format(playing, LyricsResult.NotFound, f).secondary)
             .contains("No lyrics found")
-        assertThat(CarDisplayFormatter.format(playing, LyricsResult.Error("x"), f).subtitle)
+        assertThat(CarDisplayFormatter.format(playing, LyricsResult.Error("x"), f).secondary)
             .contains("offline")
-        assertThat(CarDisplayFormatter.format(playing, LyricsResult.Instrumental, f).title)
+        assertThat(CarDisplayFormatter.format(playing, LyricsResult.Instrumental, f).primary)
             .contains("Instrumental")
         assertThat(
-            CarDisplayFormatter.format(playing, LyricsResult.PlainOnly("words", false), f).title
+            CarDisplayFormatter.format(playing, LyricsResult.PlainOnly("words", false), f).primary
         ).isEqualTo("Lyrics not synced")
     }
 
@@ -142,8 +199,8 @@ class CarDisplayFormatterTest {
 
         val display = CarDisplayFormatter.format(adState, synced, frame("old line", "older"))
 
-        assertThat(display.title).isEqualTo("Advertisement")
-        assertThat(display.title).doesNotContain("old line")
+        assertThat(display.primary).isEqualTo("Advertisement")
+        assertThat(display.primary).doesNotContain("old line")
     }
 
     @Test
@@ -155,8 +212,8 @@ class CarDisplayFormatterTest {
             lyricsEnabled = false,
         )
 
-        assertThat(display.title).isEqualTo("Bohemian Rhapsody")
-        assertThat(display.subtitle).isEqualTo("Queen")
+        assertThat(display.primary).isEqualTo("Bohemian Rhapsody")
+        assertThat(display.secondary).isEqualTo("Queen")
     }
 
     @Test
@@ -190,6 +247,6 @@ class CarDisplayFormatterTest {
 
         val display = CarDisplayFormatter.format(state, synced, frame("a line", null))
 
-        assertThat(display.subtitle).isEqualTo("Bohemian Rhapsody")
+        assertThat(display.secondary).isEqualTo("Bohemian Rhapsody")
     }
 }

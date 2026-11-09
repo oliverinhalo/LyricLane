@@ -42,7 +42,18 @@ object LyricTimeline {
             }
             val step = window / chunks.size
             chunks.forEachIndexed { chunkIndex, chunk ->
-                out += LyricLine(timeMs = line.timeMs + step * chunkIndex, text = chunk)
+                val chunkStart = line.timeMs + step * chunkIndex
+                out += LyricLine(
+                    timeMs = chunkStart,
+                    text = chunk,
+                    // Each chunk ends where the next begins; the last inherits
+                    // the original line's end, so gap detection still works.
+                    endMs = if (chunkIndex == chunks.lastIndex) {
+                        line.endMs
+                    } else {
+                        chunkStart + step
+                    },
+                )
             }
         }
         return out
@@ -72,6 +83,33 @@ object LyricTimeline {
         }
         if (current.isNotEmpty()) chunks += current.toString()
         return chunks
+    }
+
+    /**
+     * The next line with words in it, skipping blank gap markers. [skip] jumps
+     * further ahead, so `skip = 1` gives the line after next.
+     *
+     * Display wants sung lines; a blank marker on screen tells the driver
+     * nothing.
+     */
+    fun nextSung(lines: List<LyricLine>, fromIndex: Int, skip: Int = 0): LyricLine? {
+        var remaining = skip
+        for (index in (fromIndex + 1)..lines.lastIndex) {
+            val line = lines[index]
+            if (line.isGap) continue
+            if (remaining == 0) return line
+            remaining--
+        }
+        return null
+    }
+
+    /** The most recent line with words in it, at or before [fromIndex] - 1. */
+    fun previousSung(lines: List<LyricLine>, fromIndex: Int): LyricLine? {
+        for (index in (fromIndex - 1) downTo 0) {
+            val line = lines[index]
+            if (!line.isGap) return line
+        }
+        return null
     }
 
     /**

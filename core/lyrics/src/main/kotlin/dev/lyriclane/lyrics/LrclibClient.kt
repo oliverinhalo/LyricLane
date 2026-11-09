@@ -74,16 +74,26 @@ class LrclibClient(
     private fun JSONObject.toCandidate(): LyricsCandidate {
         val synced = optStringOrNull("syncedLyrics")
         val plain = optStringOrNull("plainLyrics")
+        // The structured document carries per-line end times; keep it when the
+        // entry advertises word-level sync, and fall back to the LRC otherwise.
+        val structured = optStringOrNull("lyricsfile")
+            ?.takeIf { optBoolean("hasWordSync", false) }
         return LyricsCandidate(
             id = optLong("id", 0L),
             trackName = optStringOrNull("trackName") ?: optStringOrNull("name").orEmpty(),
             artistName = optStringOrNull("artistName").orEmpty(),
             albumName = optStringOrNull("albumName"),
             durationSeconds = optDouble("duration", 0.0).takeIf { !it.isNaN() } ?: 0.0,
-            hasSynced = LrcParser.hasTimestamps(synced),
+            hasSynced = LrcParser.hasTimestamps(synced) || structured != null,
             instrumental = optBoolean("instrumental", false),
             syncedLyrics = synced,
             plainLyrics = plain,
+            source = if (structured != null) {
+                LyricsSourceId.LRCLIB_WORD_SYNCED
+            } else {
+                LyricsSourceId.LRCLIB
+            },
+            lyricsFile = structured,
         )
     }
 
@@ -123,6 +133,6 @@ class LrclibClient(
          * send a browser-like agent.
          */
         const val DEFAULT_USER_AGENT =
-            "LyricLane/0.2.0 (https://github.com/oliverinhalo/LyricLane)"
+            "LyricLane/0.3.0 (https://github.com/oliverinhalo/LyricLane)"
     }
 }

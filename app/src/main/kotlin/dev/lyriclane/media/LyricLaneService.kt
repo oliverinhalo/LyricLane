@@ -58,7 +58,7 @@ class LyricLaneService : MediaLibraryService() {
     private lateinit var player: MirrorPlayer
     private var librarySession: MediaLibrarySession? = null
 
-    /** Artwork encoding is expensive, so it is only redone when the song changes. */
+    /** Key of whatever artwork the player currently holds; see [observeSpotify]. */
     private var artworkSignature: String? = null
 
     override fun onCreate() {
@@ -120,7 +120,16 @@ class LyricLaneService : MediaLibraryService() {
                 .distinctUntilChanged()
                 .flatMapLatest { holdMs -> orchestrator.display.pace(holdMs) }
                 .collect { display ->
-                    player.setDisplayText(display.title, display.subtitle)
+                    // Which field the head unit renders large is a setting,
+                    // because Android Auto draws the *subtitle* big and other
+                    // units may not.
+                    when (settings.current.carTextSlots) {
+                        CarTextSlots.SUBTITLE_IS_BIG ->
+                            player.setDisplayText(display.secondary, display.primary)
+
+                        CarTextSlots.TITLE_IS_BIG ->
+                            player.setDisplayText(display.primary, display.secondary)
+                    }
                 }
         }
     }
@@ -139,9 +148,15 @@ class LyricLaneService : MediaLibraryService() {
                 )
                 player.setPlaying(state.isPlaying)
 
-                if (track?.signature != artworkSignature) {
-                    artworkSignature = track?.signature
-                    player.setArtwork(Artwork.toBytes(track?.artwork))
+                // Re-encoding album art is expensive, so it is only redone
+                // when the song changes or the setting is toggled. The key
+                // includes the setting so "off" is distinguishable from "no
+                // track yet".
+                val showArtwork = settings.current.showArtwork
+                val artworkKey = if (showArtwork) "art:${track?.signature}" else "off"
+                if (artworkKey != artworkSignature) {
+                    artworkSignature = artworkKey
+                    player.setArtwork(if (showArtwork) Artwork.toBytes(track?.artwork) else null)
                 }
             }
         }
@@ -149,7 +164,15 @@ class LyricLaneService : MediaLibraryService() {
 
     private fun observeSettings() {
         scope.launch {
-            settings.settings.collect { librarySession?.setCustomLayout(customLayout()) }
+            settings.settings
+                .map { it.lyricsEnabled to it.showArtwork }
+                .distinctUntilChanged()
+                .collect {
+                    librarySession?.setCustomLayout(customLayout())
+                    // Force the next Spotify update to re-evaluate artwork so
+                    // toggling it takes effect without waiting for a new song.
+                    artworkSignature = "stale"
+                }
         }
     }
 

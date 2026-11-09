@@ -67,8 +67,9 @@ class LyricLaneOrchestrator @Inject constructor(
                 spotify = spotifyState,
                 lyrics = lyricsState,
                 frame = currentFrame,
-                subtitleMode = config.subtitleMode,
+                secondaryLine = config.secondaryLine,
                 lyricsEnabled = config.lyricsEnabled,
+                packTwoLines = config.packTwoLines,
             )
         }.distinctUntilChanged()
 
@@ -236,7 +237,10 @@ class LyricLaneOrchestrator @Inject constructor(
     )
 
     private fun LyricsResult.describe(): String = when (this) {
-        is LyricsResult.Synced -> "synced, ${lines.size} lines (cache=$fromCache)"
+        is LyricsResult.Synced ->
+            "synced from ${source.label}, ${lines.size} lines" +
+                (if (hasLineEndTimes) ", with line end times" else "") +
+                " (cache=$fromCache)"
         is LyricsResult.PlainOnly -> "plain only"
         LyricsResult.Instrumental -> "instrumental"
         LyricsResult.NotFound -> "not found"

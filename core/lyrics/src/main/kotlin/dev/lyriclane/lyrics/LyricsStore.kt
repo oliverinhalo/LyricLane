@@ -23,6 +23,10 @@ data class CachedLyrics(
     val artistName: String,
     val syncedLyrics: String?,
     val plainLyrics: String?,
+    /** LRCLIB's structured document, when the entry had one (line end times). */
+    val lyricsFile: String?,
+    /** Name of the [LyricsSourceId] this came from, for display in the UI. */
+    val source: String?,
     val instrumental: Boolean,
     val notFound: Boolean,
     val fetchedAtMs: Long,
@@ -65,7 +69,9 @@ interface LyricsDao {
 
 @Database(
     entities = [CachedLyrics::class, TrackOffset::class],
-    version = 1,
+    // v2 added the structured-lyrics and source columns. The cache is
+    // reconstructible from the network, so it is dropped rather than migrated.
+    version = 2,
     exportSchema = false,
 )
 abstract class LyricsDatabase : RoomDatabase() {
