@@ -3,6 +3,7 @@ package dev.lyriclane.media
 import android.os.SystemClock
 import android.util.Log
 import dev.lyriclane.lyrics.LookupReport
+import dev.lyriclane.lyrics.LyricLine
 import dev.lyriclane.lyrics.LyricSyncEngine
 import dev.lyriclane.lyrics.LyricTimeline
 import dev.lyriclane.lyrics.LyricsCandidate
@@ -27,6 +28,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 
 /**
@@ -65,6 +67,16 @@ class LyricLaneOrchestrator @Inject constructor(
     private val _lastLookup = MutableStateFlow<LookupReport?>(null)
     val lastLookup: StateFlow<LookupReport?> = _lastLookup.asStateFlow()
 
+    /**
+     * The lines as the engine sees them, after long ones have been split.
+     *
+     * The phone must render *these* rather than the raw lyrics: the frame's
+     * line index points into this list, so showing the unsplit version would
+     * highlight the wrong line from the first split onwards.
+     */
+    private val _timeline = MutableStateFlow<List<LyricLine>>(emptyList())
+    val timeline: StateFlow<List<LyricLine>> = _timeline.asStateFlow()
+
     /** The two lines destined for the car. Also shown on the phone, for parity. */
     val display: Flow<CarDisplay> =
         combine(spotify, lyrics, frame, settings) { spotifyState, lyricsState, currentFrame, config ->
@@ -75,12 +87,17 @@ class LyricLaneOrchestrator @Inject constructor(
                 secondaryLine = config.secondaryLine,
                 lyricsEnabled = config.lyricsEnabled,
                 packTwoLines = config.packTwoLines,
+                maxChars = config.carLineLength.maxChars,
             )
         }.distinctUntilChanged()
 
     private var started = false
     private var currentSignature: String? = null
     private var lyricsJob: Job? = null
+
+    /** Kept so the timeline can be re-split when the line length changes. */
+    private var armedResult: LyricsResult = LyricsResult.Idle
+    private var armedDurationMs: Long = 0L
 
     fun start() {
         if (started) return
@@ -96,6 +113,14 @@ class LyricLaneOrchestrator @Inject constructor(
             SpotifyNotificationListener.connected.collect { connected ->
                 if (connected) watcher.refresh()
             }
+        }
+        // Changing how much text fits on a car line changes where lines are
+        // split, so the timeline has to be rebuilt.
+        scope.launch {
+            settingsStore.settings
+                .map { it.carLineLength }
+                .distinctUntilChanged()
+                .collect { armTimeline(armedResult, armedDurationMs) }
         }
     }
 
@@ -216,17 +241,19 @@ class LyricLaneOrchestrator @Inject constructor(
     }
 
     private fun armTimeline(result: LyricsResult, durationMs: Long) {
-        if (result is LyricsResult.Synced) {
-            engine.setTimeline(
-                LyricTimeline.prepare(
-                    lines = result.lines,
-                    maxChars = CarDisplayFormatter.MAX_CHARS,
-                    trackDurationMs = durationMs,
-                )
+        armedResult = result
+        armedDurationMs = durationMs
+        val prepared = if (result is LyricsResult.Synced) {
+            LyricTimeline.prepare(
+                lines = result.lines,
+                maxChars = settingsStore.current.carLineLength.maxChars,
+                trackDurationMs = durationMs,
             )
         } else {
-            engine.setTimeline(emptyList())
+            emptyList()
         }
+        _timeline.value = prepared
+        engine.setTimeline(prepared)
     }
 
     private fun SpotifyTrack.toIdentity() = TrackIdentity(

@@ -259,10 +259,10 @@ class LyricLaneService : MediaLibraryService() {
             pageSize: Int,
             params: LibraryParams?,
         ): ListenableFuture<LibraryResult<ImmutableList<MediaItem>>> {
-            val children = if (parentId == ROOT_ID) {
-                ImmutableList.of(nowPlayingItem())
-            } else {
-                ImmutableList.of()
+            val children = when (parentId) {
+                ROOT_ID -> ImmutableList.of(nowPlayingItem(), settingsFolder())
+                SETTINGS_ID -> ImmutableList.copyOf(settingsItems())
+                else -> ImmutableList.of()
             }
             return Futures.immediateFuture(LibraryResult.ofItemList(children, params))
         }
@@ -271,10 +271,22 @@ class LyricLaneService : MediaLibraryService() {
             session: MediaLibrarySession,
             browser: MediaSession.ControllerInfo,
             mediaId: String,
-        ): ListenableFuture<LibraryResult<MediaItem>> = when (mediaId) {
-            ROOT_ID -> Futures.immediateFuture(LibraryResult.ofItem(rootItem(), null))
-            MirrorPlayer.NOW_PLAYING_UID ->
+        ): ListenableFuture<LibraryResult<MediaItem>> = when {
+            mediaId == ROOT_ID ->
+                Futures.immediateFuture(LibraryResult.ofItem(rootItem(), null))
+
+            mediaId == MirrorPlayer.NOW_PLAYING_UID ->
                 Futures.immediateFuture(LibraryResult.ofItem(nowPlayingItem(), null))
+
+            mediaId == SETTINGS_ID ->
+                Futures.immediateFuture(LibraryResult.ofItem(settingsFolder(), null))
+
+            mediaId.startsWith(SETTING_PREFIX) ->
+                settingsItems().firstOrNull { it.mediaId == mediaId }
+                    ?.let { Futures.immediateFuture(LibraryResult.ofItem(it, null)) }
+                    ?: Futures.immediateFuture(
+                        LibraryResult.ofError(LibraryResult.RESULT_ERROR_BAD_VALUE)
+                    )
 
             else -> Futures.immediateFuture(
                 LibraryResult.ofError(LibraryResult.RESULT_ERROR_BAD_VALUE)
@@ -282,15 +294,23 @@ class LyricLaneService : MediaLibraryService() {
         }
 
         /**
-         * The browse tree has one entry and we never change what we mirror, so a
-         * tap on it means "resume Spotify" rather than "play this".
+         * A tap in the browse tree is either a setting or "resume Spotify".
+         *
+         * Android Auto has no way for a media app to show a settings screen, so
+         * the settings live in the browse tree as items that toggle when
+         * tapped. Tapping one must emphatically *not* start playback.
          */
         override fun onAddMediaItems(
             mediaSession: MediaSession,
             controller: MediaSession.ControllerInfo,
             mediaItems: MutableList<MediaItem>,
         ): ListenableFuture<MutableList<MediaItem>> {
-            orchestrator.play()
+            val settingId = mediaItems.firstOrNull { it.mediaId.startsWith(SETTING_PREFIX) }?.mediaId
+            if (settingId != null) {
+                applySetting(settingId)
+            } else {
+                orchestrator.play()
+            }
             return Futures.immediateFuture(mutableListOf(nowPlayingItem()))
         }
     }
@@ -306,6 +326,118 @@ class LyricLaneService : MediaLibraryService() {
                 .build()
         )
         .build()
+
+    private fun settingsFolder(): MediaItem = browsableItem(
+        mediaId = SETTINGS_ID,
+        title = "Settings",
+        subtitle = "Change these without picking up your phone",
+    )
+
+    /**
+     * The settings, as browse items labelled with their current value. Tapping
+     * one advances it and the list is refreshed in place.
+     */
+    private fun settingsItems(): List<MediaItem> {
+        val current = settings.current
+        return listOf(
+            settingItem(
+                SETTING_LINE_LENGTH,
+                "Line length: ${current.carLineLength.label}",
+                "${current.carLineLength.maxChars} characters before a line is split",
+            ),
+            settingItem(
+                SETTING_LYRICS,
+                "Lyrics: ${onOff(current.lyricsEnabled)}",
+                "Off shows the song title and artist instead",
+            ),
+            settingItem(
+                SETTING_SLOTS,
+                "Large text: ${current.carTextSlots.label}",
+                "Switch if the lyric shows in the small line",
+            ),
+            settingItem(
+                SETTING_TITLE_COPY,
+                "Lyric in title too: ${onOff(current.lyricInTitle)}",
+                "For instrument clusters and head-up displays",
+            ),
+            settingItem(
+                SETTING_SECONDARY,
+                "Smaller line: ${current.secondaryLine.label}",
+                "What sits under the lyric",
+            ),
+            settingItem(
+                SETTING_ARTWORK,
+                "Album art: ${onOff(current.showArtwork)}",
+                "Off gives the words more of the card",
+            ),
+            settingItem(
+                SETTING_RESET_OFFSET,
+                "Reset timing for this song",
+                "Clears the offset you nudged with Offset ±",
+            ),
+        )
+    }
+
+    /** Advances one setting and tells the car to re-read the list. */
+    private fun applySetting(mediaId: String) {
+        val current = settings.current
+        when (mediaId) {
+            SETTING_LINE_LENGTH -> settings.setCarLineLength(current.carLineLength.next())
+            SETTING_LYRICS -> settings.setLyricsEnabled(!current.lyricsEnabled)
+            SETTING_SLOTS -> settings.setCarTextSlots(
+                if (current.carTextSlots == CarTextSlots.SUBTITLE_IS_BIG) {
+                    CarTextSlots.TITLE_IS_BIG
+                } else {
+                    CarTextSlots.SUBTITLE_IS_BIG
+                }
+            )
+
+            SETTING_TITLE_COPY -> settings.setLyricInTitle(!current.lyricInTitle)
+            SETTING_SECONDARY -> settings.setSecondaryLine(
+                SecondaryLine.entries[
+                    (current.secondaryLine.ordinal + 1) % SecondaryLine.entries.size,
+                ]
+            )
+
+            SETTING_ARTWORK -> settings.setShowArtwork(!current.showArtwork)
+            SETTING_RESET_OFFSET -> orchestrator.setOffset(0L)
+            else -> return
+        }
+        val items = settingsItems()
+        librarySession?.notifyChildrenChanged(SETTINGS_ID, items.size, null)
+    }
+
+    private fun onOff(enabled: Boolean) = if (enabled) "on" else "off"
+
+    private fun browsableItem(mediaId: String, title: String, subtitle: String) =
+        MediaItem.Builder()
+            .setMediaId(mediaId)
+            .setMediaMetadata(
+                MediaMetadata.Builder()
+                    .setTitle(title)
+                    .setSubtitle(subtitle)
+                    .setIsBrowsable(true)
+                    .setIsPlayable(false)
+                    .setMediaType(MediaMetadata.MEDIA_TYPE_FOLDER_MIXED)
+                    .build()
+            )
+            .build()
+
+    private fun settingItem(mediaId: String, title: String, subtitle: String) =
+        MediaItem.Builder()
+            .setMediaId(mediaId)
+            .setMediaMetadata(
+                MediaMetadata.Builder()
+                    .setTitle(title)
+                    .setSubtitle(subtitle)
+                    .setIsBrowsable(false)
+                    // Playable so the car makes it tappable; the tap is
+                    // intercepted in onAddMediaItems and never starts playback.
+                    .setIsPlayable(true)
+                    .setMediaType(MediaMetadata.MEDIA_TYPE_MUSIC)
+                    .build()
+            )
+            .build()
 
     private fun nowPlayingItem(): MediaItem = MediaItem.Builder()
         .setMediaId(MirrorPlayer.NOW_PLAYING_UID)
@@ -323,6 +455,16 @@ class LyricLaneService : MediaLibraryService() {
         private const val TAG = "LyricLane"
         private const val IDLE_UID = "lyriclane_idle"
         const val ROOT_ID = "lyriclane_root"
+        const val SETTINGS_ID = "lyriclane_settings"
+
+        private const val SETTING_PREFIX = "lyriclane_set/"
+        private const val SETTING_LINE_LENGTH = SETTING_PREFIX + "line_length"
+        private const val SETTING_LYRICS = SETTING_PREFIX + "lyrics"
+        private const val SETTING_SLOTS = SETTING_PREFIX + "slots"
+        private const val SETTING_TITLE_COPY = SETTING_PREFIX + "title_copy"
+        private const val SETTING_SECONDARY = SETTING_PREFIX + "secondary"
+        private const val SETTING_ARTWORK = SETTING_PREFIX + "artwork"
+        private const val SETTING_RESET_OFFSET = SETTING_PREFIX + "reset_offset"
         const val COMMAND_OFFSET_MINUS = "dev.lyriclane.OFFSET_MINUS"
         const val COMMAND_OFFSET_PLUS = "dev.lyriclane.OFFSET_PLUS"
         const val COMMAND_TOGGLE_LYRICS = "dev.lyriclane.TOGGLE_LYRICS"

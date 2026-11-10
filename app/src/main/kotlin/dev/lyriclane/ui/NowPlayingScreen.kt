@@ -32,6 +32,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import dev.lyriclane.lyrics.LyricLine
 import dev.lyriclane.lyrics.LyricsResult
 import java.util.Locale
 
@@ -44,6 +45,7 @@ fun NowPlayingScreen(viewModel: NowPlayingViewModel) {
     val offsetMs by viewModel.offsetMs.collectAsStateWithLifecycle()
     val settings by viewModel.settings.collectAsStateWithLifecycle()
     val lastLookup by viewModel.lastLookup.collectAsStateWithLifecycle()
+    val timeline by viewModel.timeline.collectAsStateWithLifecycle()
     var pickerOpen by remember { mutableStateOf(false) }
 
     Column(Modifier.fillMaxSize()) {
@@ -126,6 +128,7 @@ fun NowPlayingScreen(viewModel: NowPlayingViewModel) {
         HorizontalDivider()
         LyricsPane(
             lyrics = lyrics,
+            lines = timeline,
             activeIndex = frame.lineIndex,
             textScale = settings.lyricTextScale,
             lookupDetail = lastLookup?.summary(),
@@ -179,6 +182,7 @@ private fun OffsetRow(offsetMs: Long, onNudge: (Long) -> Unit, onReset: () -> Un
 @Composable
 private fun LyricsPane(
     lyrics: LyricsResult,
+    lines: List<LyricLine>,
     activeIndex: Int,
     textScale: Float,
     lookupDetail: String?,
@@ -206,7 +210,10 @@ private fun LyricsPane(
                     vertical = 12.dp,
                 ),
             ) {
-                itemsIndexed(lyrics.lines) { index, line ->
+                // Deliberately the prepared timeline, not lyrics.lines: the
+                // active index counts split pieces, so the raw list would
+                // highlight the wrong line from the first split onwards.
+                itemsIndexed(lines) { index, line ->
                     val isActive = index == activeIndex
                     // Every line is the same size, so nothing jumps as the song
                     // moves on; the active line is told apart by weight and

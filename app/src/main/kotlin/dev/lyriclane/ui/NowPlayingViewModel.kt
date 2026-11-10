@@ -9,6 +9,7 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import dev.lyriclane.lyrics.LyricsCandidate
 import dev.lyriclane.media.CarDisplay
 import dev.lyriclane.media.LyricLaneOrchestrator
+import dev.lyriclane.media.CarLineLength
 import dev.lyriclane.media.CarTextSlots
 import dev.lyriclane.media.SecondaryLine
 import dev.lyriclane.media.SettingsStore
@@ -29,6 +30,9 @@ class NowPlayingViewModel @Inject constructor(
     val identity = orchestrator.identity
     val offsetMs = orchestrator.offsetMs
     val lastLookup = orchestrator.lastLookup
+
+    /** The split timeline the engine runs on; the frame's index points into it. */
+    val timeline = orchestrator.timeline
     val settings = settingsStore.settings
 
     /** Exactly what the car is being shown, so the phone can verify it. */
@@ -62,6 +66,7 @@ class NowPlayingViewModel @Inject constructor(
     fun setCarTextSlots(slots: CarTextSlots) = settingsStore.setCarTextSlots(slots)
     fun setShowArtwork(show: Boolean) = settingsStore.setShowArtwork(show)
     fun setLyricInTitle(enabled: Boolean) = settingsStore.setLyricInTitle(enabled)
+    fun setCarLineLength(length: CarLineLength) = settingsStore.setCarLineLength(length)
     fun setPackTwoLines(pack: Boolean) = settingsStore.setPackTwoLines(pack)
     fun setLyricTextScale(scale: Float) = settingsStore.setLyricTextScale(scale)
     fun setDefaultOffset(ms: Long) = settingsStore.setDefaultOffsetMs(ms)

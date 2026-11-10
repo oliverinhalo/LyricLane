@@ -29,6 +29,8 @@ class SettingsStore @Inject constructor(@ApplicationContext context: Context) {
          * head-up displays, which read the title rather than the subtitle.
          */
         val lyricInTitle: Boolean = false,
+        /** How much text goes on one car line before it is split. */
+        val carLineLength: CarLineLength = CarLineLength.DEFAULT,
         val packTwoLines: Boolean = false,
         /** Multiplier on the lyric text size on the phone screen. */
         val lyricTextScale: Float = DEFAULT_TEXT_SCALE,
@@ -49,6 +51,8 @@ class SettingsStore @Inject constructor(@ApplicationContext context: Context) {
     fun setShowArtwork(show: Boolean) = edit { putBoolean(KEY_SHOW_ARTWORK, show) }
 
     fun setLyricInTitle(enabled: Boolean) = edit { putBoolean(KEY_LYRIC_IN_TITLE, enabled) }
+
+    fun setCarLineLength(length: CarLineLength) = edit { putString(KEY_LINE_LENGTH, length.name) }
 
     fun setPackTwoLines(pack: Boolean) = edit { putBoolean(KEY_PACK_TWO_LINES, pack) }
 
@@ -80,6 +84,9 @@ class SettingsStore @Inject constructor(@ApplicationContext context: Context) {
         lyricsEnabled = prefs.getBoolean(KEY_LYRICS_ON, true),
         showArtwork = prefs.getBoolean(KEY_SHOW_ARTWORK, true),
         lyricInTitle = prefs.getBoolean(KEY_LYRIC_IN_TITLE, false),
+        carLineLength = runCatching {
+            CarLineLength.valueOf(prefs.getString(KEY_LINE_LENGTH, CarLineLength.DEFAULT.name)!!)
+        }.getOrDefault(CarLineLength.DEFAULT),
         packTwoLines = prefs.getBoolean(KEY_PACK_TWO_LINES, false),
         lyricTextScale = prefs.getFloat(KEY_TEXT_SCALE, DEFAULT_TEXT_SCALE),
     )
@@ -103,6 +110,7 @@ class SettingsStore @Inject constructor(@ApplicationContext context: Context) {
         private const val KEY_LYRICS_ON = "lyrics_enabled"
         private const val KEY_SHOW_ARTWORK = "show_artwork"
         private const val KEY_LYRIC_IN_TITLE = "lyric_in_title"
+        private const val KEY_LINE_LENGTH = "car_line_length"
         private const val KEY_PACK_TWO_LINES = "pack_two_lines"
         private const val KEY_TEXT_SCALE = "lyric_text_scale"
     }

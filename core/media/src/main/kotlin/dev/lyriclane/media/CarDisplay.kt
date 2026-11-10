@@ -32,6 +32,29 @@ enum class CarTextSlots(val label: String) {
     TITLE_IS_BIG("Title"),
 }
 
+/**
+ * How much text may go on one car line before it is split.
+ *
+ * The dashboard card is a third of the screen wide. A line that fits the full
+ * now-playing screen wraps there, and a wrapped line is often clipped — so the
+ * driver sees neither half. Rather than truncate, long lines are split into
+ * timed pieces, each shown when its words are actually sung.
+ */
+enum class CarLineLength(val maxChars: Int, val label: String) {
+    SHORT(26, "Short"),
+    MEDIUM(36, "Medium"),
+    LONG(46, "Long"),
+    FULL(56, "Full"),
+    ;
+
+    fun next(): CarLineLength = entries[(ordinal + 1) % entries.size]
+
+    companion object {
+        /** Sized to fit the split-screen dashboard card on one line. */
+        val DEFAULT = MEDIUM
+    }
+}
+
 /** What the smaller line carries while lyrics are playing. */
 enum class SecondaryLine(val label: String) {
     NEXT_LINE("Next line"),
@@ -53,12 +76,8 @@ enum class SecondaryLine(val label: String) {
  */
 object CarDisplayFormatter {
 
-    /**
-     * Android Auto gives us one line and truncates past it. Measured against
-     * the narrowest case — the 1/3-width dashboard card — rather than the full
-     * now-playing screen.
-     */
-    const val MAX_CHARS = 56
+    /** Fallback when no length has been chosen. */
+    const val MAX_CHARS = 36
 
     private const val REST = "♪"
 
@@ -69,6 +88,7 @@ object CarDisplayFormatter {
         secondaryLine: SecondaryLine = SecondaryLine.NEXT_LINE,
         lyricsEnabled: Boolean = true,
         packTwoLines: Boolean = false,
+        maxChars: Int = MAX_CHARS,
     ): CarDisplay {
         if (!spotify.permissionGranted) {
             return CarDisplay(
@@ -88,27 +108,32 @@ object CarDisplayFormatter {
             return CarDisplay(primary = "Advertisement", secondary = "Lyrics resume after the break")
         }
         if (!lyricsEnabled) {
-            return CarDisplay(truncate(track.title), truncate(track.artist))
+            return CarDisplay(truncate(track.title, maxChars), truncate(track.artist, maxChars))
         }
 
         return when (lyrics) {
-            is LyricsResult.Idle -> CarDisplay(truncate(track.title), truncate(track.artist))
+            is LyricsResult.Idle ->
+                CarDisplay(truncate(track.title, maxChars), truncate(track.artist, maxChars))
 
-            is LyricsResult.Loading -> CarDisplay(truncate(track.title), "Finding lyrics…")
+            is LyricsResult.Loading ->
+                CarDisplay(truncate(track.title, maxChars), "Finding lyrics…")
 
-            is LyricsResult.NotFound ->
-                CarDisplay(truncate(track.title), "No lyrics found · ${truncate(track.artist)}")
+            is LyricsResult.NotFound -> CarDisplay(
+                truncate(track.title, maxChars),
+                "No lyrics found · ${truncate(track.artist, maxChars)}",
+            )
 
             is LyricsResult.Error ->
-                CarDisplay(truncate(track.title), "Lyrics unavailable · offline?")
+                CarDisplay(truncate(track.title, maxChars), "Lyrics unavailable · offline?")
 
             is LyricsResult.Instrumental ->
-                CarDisplay("$REST  Instrumental", truncate(songInfo))
+                CarDisplay("$REST  Instrumental", truncate(songInfo, maxChars))
 
             is LyricsResult.PlainOnly ->
-                CarDisplay("Lyrics not synced", truncate(songInfo))
+                CarDisplay("Lyrics not synced", truncate(songInfo, maxChars))
 
-            is LyricsResult.Synced -> syncedDisplay(frame, songInfo, secondaryLine, packTwoLines)
+            is LyricsResult.Synced ->
+                syncedDisplay(frame, songInfo, secondaryLine, packTwoLines, maxChars)
         }
     }
 
@@ -117,6 +142,7 @@ object CarDisplayFormatter {
         songInfo: String,
         secondaryLine: SecondaryLine,
         packTwoLines: Boolean,
+        maxChars: Int,
     ): CarDisplay {
         val sung = frame.current?.takeIf { !it.isGap }
         // Nothing is being sung right now — before the first line, or between
@@ -131,19 +157,25 @@ object CarDisplayFormatter {
         val followText = follow?.text?.takeIf { it.isNotBlank() }
 
         val primary = when {
-            leadText == null -> truncate(songInfo)
-            packTwoLines && followText != null -> "${truncate(leadText)}\n${truncate(followText)}"
-            else -> truncate(leadText)
+            leadText == null -> truncate(songInfo, maxChars)
+            packTwoLines && followText != null ->
+                "${truncate(leadText, maxChars)}\n${truncate(followText, maxChars)}"
+
+            else -> truncate(leadText, maxChars)
         }
 
         val secondary = when (secondaryLine) {
-            SecondaryLine.SONG_INFO -> truncate(songInfo)
+            SecondaryLine.SONG_INFO -> truncate(songInfo, maxChars)
             SecondaryLine.PREVIOUS_LINE ->
-                frame.previous?.text?.takeIf { it.isNotBlank() }?.let(::truncate)
-                    ?: truncate(songInfo)
+                frame.previous?.text?.takeIf { it.isNotBlank() }
+                    ?.let { truncate(it, maxChars) }
+                    ?: truncate(songInfo, maxChars)
 
-            SecondaryLine.NEXT_LINE ->
-                if (packTwoLines) truncate(songInfo) else followText?.let(::truncate) ?: truncate(songInfo)
+            SecondaryLine.NEXT_LINE -> when {
+                packTwoLines -> truncate(songInfo, maxChars)
+                followText != null -> truncate(followText, maxChars)
+                else -> truncate(songInfo, maxChars)
+            }
         }
         return CarDisplay(primary, secondary)
     }

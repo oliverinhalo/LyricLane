@@ -24,6 +24,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import dev.lyriclane.media.CarLineLength
 import dev.lyriclane.media.CarTextSlots
 import dev.lyriclane.media.SecondaryLine
 import dev.lyriclane.media.SettingsStore
@@ -53,6 +54,30 @@ fun SettingsScreen(viewModel: NowPlayingViewModel) {
             valueRange = SettingsStore.MIN_TEXT_SCALE..SettingsStore.MAX_TEXT_SCALE,
             steps = 35,
         )
+
+        Spacer(Modifier.height(24.dp))
+        HorizontalDivider()
+        Spacer(Modifier.height(16.dp))
+
+        Text("Line length in the car", style = MaterialTheme.typography.titleMedium)
+        Text(
+            "The dashboard card is a third of the screen wide, so a line that " +
+                "fits the full now-playing screen wraps there \u2014 and a wrapped " +
+                "line is usually clipped. Shorter lengths split long lines into " +
+                "timed pieces instead of losing the ends. " +
+                "Now: ${settings.carLineLength.maxChars} characters.",
+            style = MaterialTheme.typography.bodySmall,
+        )
+        Spacer(Modifier.height(8.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            CarLineLength.entries.forEach { length ->
+                FilterChip(
+                    selected = settings.carLineLength == length,
+                    onClick = { viewModel.setCarLineLength(length) },
+                    label = { Text(length.label) },
+                )
+            }
+        }
 
         Spacer(Modifier.height(24.dp))
         HorizontalDivider()
@@ -224,6 +249,13 @@ fun SettingsScreen(viewModel: NowPlayingViewModel) {
         ) {
             Text("Notification access settings")
         }
+
+        Spacer(Modifier.height(24.dp))
+        Text(
+            "Most of these can also be changed from the car: open LyricLane's " +
+                "browse list and pick Settings.",
+            style = MaterialTheme.typography.bodySmall,
+        )
 
         Spacer(Modifier.height(32.dp))
         Text(

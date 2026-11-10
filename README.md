@@ -125,6 +125,17 @@ Three custom actions appear on the now-playing screen:
 
 Offsets are saved per song, so a track you corrected once stays corrected.
 
+### Settings, without picking up your phone
+
+Android Auto gives a media app no way to show a settings screen, so LyricLane
+puts its settings in the browse list. Open LyricLane's browser in the car and
+pick **Settings**: each row shows its current value and advances when tapped.
+The list refreshes in place and nothing starts playing.
+
+Line length, lyrics on/off, which line is drawn large, lyric in the title,
+what the smaller line carries, album art, and "reset timing for this song" are
+all there.
+
 ### What you should see
 
 | Situation | On the car screen |
@@ -149,6 +160,7 @@ before a new one loads.
 | Setting | What it does |
 |---|---|
 | **Lyric size** | Phone screen only. Starts at 1.45×. |
+| **Line length in the car** | Short 26 / Medium 36 / Long 46 / Full 56 characters. The dashboard card is a third of the screen wide, so a line sized for the full now-playing screen wraps there — and a wrapped line is usually clipped. Shorter lengths split long lines into timed pieces instead of losing their ends. Default Medium. |
 | **Which line the car shows large** | Android Auto draws the *subtitle* large and the title small above it — the opposite of what the names suggest. Switch this if your head unit does it the other way. |
 | **Lyric in the title too** | Instrument clusters and head-up displays read the title. This puts the lyric in both slots so the HUD gets it without the card losing it. |
 | **Smaller line in the car** | Next line, previous line, or song and artist. Previous line helps when timing drifts. |
@@ -173,6 +185,10 @@ recording of the right length, so the usual path is a single request.
    line is too long for the screen, its pieces hand over on the beat the next
    word is actually sung rather than splitting the window evenly. Coverage is
    partial — common on recent pop, absent on older catalogue.
+
+   Without word timings a split line still works: the pieces share the gap
+   before the next line evenly, and a line with too little time to read two
+   pieces is left whole for the car to truncate.
 2. **LRCLIB, ordinary LRC.**
 3. **NetEase Cloud Music.** Public endpoints, no key. Often has a well-timed
    file for tracks LRCLIB has missed.
@@ -227,8 +243,13 @@ metadata, not a layout.
 | Album art size | the head unit's choice |
 | Number of text lines | two |
 
-**Ours to choose:** which of the two fields each line goes in, what the second
-line carries, whether artwork is sent at all, and how often metadata is pushed.
+**Ours to choose:** which of the two fields each line goes in, how long a line
+may be before it is split, what the second line carries, whether artwork is
+sent at all, and how often metadata is pushed.
+
+Note that both screens get the *same* metadata. The dashboard card is much
+narrower than the now-playing screen, so line length is set for the narrower of
+the two.
 
 ---
 
