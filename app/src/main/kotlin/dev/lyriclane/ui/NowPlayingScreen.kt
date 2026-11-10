@@ -43,6 +43,7 @@ fun NowPlayingScreen(viewModel: NowPlayingViewModel) {
     val display by viewModel.display.collectAsStateWithLifecycle()
     val offsetMs by viewModel.offsetMs.collectAsStateWithLifecycle()
     val settings by viewModel.settings.collectAsStateWithLifecycle()
+    val lastLookup by viewModel.lastLookup.collectAsStateWithLifecycle()
     var pickerOpen by remember { mutableStateOf(false) }
 
     Column(Modifier.fillMaxSize()) {
@@ -127,6 +128,7 @@ fun NowPlayingScreen(viewModel: NowPlayingViewModel) {
             lyrics = lyrics,
             activeIndex = frame.lineIndex,
             textScale = settings.lyricTextScale,
+            lookupDetail = lastLookup?.summary(),
             modifier = Modifier.weight(1f),
         )
     }
@@ -179,6 +181,7 @@ private fun LyricsPane(
     lyrics: LyricsResult,
     activeIndex: Int,
     textScale: Float,
+    lookupDetail: String?,
     modifier: Modifier = Modifier,
 ) {
     when (lyrics) {
@@ -242,16 +245,30 @@ private fun LyricsPane(
         LyricsResult.NotFound -> Message(
             modifier = modifier,
             heading = "No lyrics found",
-            body = "LRCLIB does not have this track. Try \"Wrong lyrics?\" to search " +
-                "for it by hand — Spotify's title sometimes differs from the one " +
-                "the lyrics are filed under.",
+            body = buildString {
+                append("Try \"Wrong lyrics?\" to search by hand — Spotify's title ")
+                append("sometimes differs from the one the lyrics are filed under.")
+                // Say what each source actually reported, so "it cannot find
+                // anything" becomes something diagnosable.
+                lookupDetail?.takeIf { it.isNotBlank() }?.let {
+                    append("\n\n")
+                    append(it)
+                }
+            },
         )
 
         is LyricsResult.Error -> Message(
             modifier = modifier,
-            heading = "Could not reach LRCLIB",
-            body = "${lyrics.message}\n\nCached songs still work offline. " +
-                "Tap \"Look again\" when you have a connection.",
+            heading = "Could not reach a lyrics source",
+            body = buildString {
+                append(lyrics.message)
+                append("\n\nCached songs still work offline. ")
+                append("Tap \"Look again\" when you have a connection.")
+                lookupDetail?.takeIf { it.isNotBlank() }?.let {
+                    append("\n\n")
+                    append(it)
+                }
+            },
         )
 
         LyricsResult.Loading -> Message(modifier, "Finding lyrics…", "")

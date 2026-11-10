@@ -45,6 +45,18 @@ object TextNormalizer {
     }
 
     /**
+     * The title with Spotify's decorations removed but its own words intact,
+     * for use as a search term. Unlike [normalize] this keeps capitalisation
+     * and punctuation, because a search engine wants a real title.
+     */
+    fun withoutDecorations(raw: String): String {
+        var s = NOISE_PARENTHETICAL.replace(raw, " ")
+        s = NOISE_SUFFIX.replace(s, " ")
+        s = FEATURING.replace(s, " ")
+        return s.trim().replace(Regex(" +"), " ").trimEnd('-', '\u2013', ',').trim()
+    }
+
+    /**
      * The artist as LRCLIB is most likely to hold it: Spotify joins multiple
      * artists with ", " or " & ", LRCLIB usually stores only the first.
      */

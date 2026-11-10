@@ -1,4 +1,4 @@
-source	id	trackName	artistName	albumName	duration	instrumental	hasSynced
+source	id	trackName	artistName	albumName	duration	instrumental	hasWordSync
 get	4742971	Come Together (Remastered 2009)	The Beatles	Abbey Road	260.0	false	true
 search	4742971	Come Together (Remastered 2009)	The Beatles	Abbey Road	260.0	false	true
 search	4078064	Come Together (Remastered 2009)	The Beatles	The Beatles 1967 - 1970 (Remastered)	260.0	false	true
@@ -6,17 +6,17 @@ search	1505251	Come Together (Remastered 2009)	The Beatles	70s Lunchtime Drive	2
 search	1505257	Come Together (Remastered 2009)	The Beatles	Driving Rock Anthems	260.0	false	true
 search	1505254	Come Together (Remastered 2009)	The Beatles	Classic Rock Drive	260.0	false	true
 search	13469	Come Together - Remastered 2009	The Beatles	Abbey Road (Remastered)	260.0	false	true
-search	9013544	Come Together (Remastered 2009)	The Beatles	Supernatural Soundtrack  [All Seasons]	259.0	false	true
-search	8849629	Come Together (Remastered 2009)	The Beatles	All 60's Top Hits	260.0	false	true
-search	29851658	Come Together (Remastered 2009)	The Beatles	The 500 Greatest Songs of All Time: Rolling Stone	260.0	false	true
-search	32200353	Come Together - Remastered 2009	The Beatles	Golden Oldies	260.0	false	true
-search	31071424	Come Together (Remastered 2009)	The beatles	Classic Rock Songs 60s 70s 80s 90s	260.0	false	true
-search	17901209	Come Together (Remastered 2009)	The Beatles	ARROW Classic Rock Top 500 Editie 2023	259.996735	false	true
-search	21036589	Come Together (Remastered 2009)	The Beatles	Album - Abbey Road	259.9674999	false	true
-search	17756747	Come Together - Remastered 2009	The Beatles	Kink Top 1500 (2024)	260.022857	false	true
-search	16634423	Come Together - Remastered 2009	The Beatles	Supernatural (Saison 1-15)	258.51095	false	true
-search	17292261	Come Together (Remastered 2009)	The Beatles	60s Rock Essentials	260.0	false	true
-search	16263521	Come Together (Remastered 2009)	The Beatles	4:20	260.0	false	true
-search	14388343	Come Together (Remastered 2009)	The Beatles	Veronica Top 1000 Allertijden 2021	259.996735	false	true
-search	15467878	Come Together (Remastered 2009)	The Beatles	The Beatles 1967 - 1970	260.0	false	true
-search	11079208	Come Together - Remastered 2009	The Beatles	Discover More Classic Rock	259.0	false	true
+search	9013544	Come Together (Remastered 2009)	The Beatles	Supernatural Soundtrack  [All Seasons]	259.0	false	false
+search	8849629	Come Together (Remastered 2009)	The Beatles	All 60's Top Hits	260.0	false	false
+search	29851658	Come Together (Remastered 2009)	The Beatles	The 500 Greatest Songs of All Time: Rolling Stone	260.0	false	false
+search	32200353	Come Together - Remastered 2009	The Beatles	Golden Oldies	260.0	false	false
+search	31071424	Come Together (Remastered 2009)	The beatles	Classic Rock Songs 60s 70s 80s 90s	260.0	false	false
+search	17901209	Come Together (Remastered 2009)	The Beatles	ARROW Classic Rock Top 500 Editie 2023	259.996735	false	false
+search	21036589	Come Together (Remastered 2009)	The Beatles	Album - Abbey Road	259.9674999	false	false
+search	17756747	Come Together - Remastered 2009	The Beatles	Kink Top 1500 (2024)	260.022857	false	false
+search	16634423	Come Together - Remastered 2009	The Beatles	Supernatural (Saison 1-15)	258.51095	false	false
+search	17292261	Come Together (Remastered 2009)	The Beatles	60s Rock Essentials	260.0	false	false
+search	16263521	Come Together (Remastered 2009)	The Beatles	4:20	260.0	false	false
+search	14388343	Come Together (Remastered 2009)	The Beatles	Veronica Top 1000 Allertijden 2021	259.996735	false	false
+search	15467878	Come Together (Remastered 2009)	The Beatles	The Beatles 1967 - 1970	260.0	false	false
+search	11079208	Come Together - Remastered 2009	The Beatles	Discover More Classic Rock	259.0	false	false

@@ -1,4 +1,4 @@
-source	id	trackName	artistName	albumName	duration	instrumental	hasSynced
+source	id	trackName	artistName	albumName	duration	instrumental	hasWordSync
 get	1740042	Weightless	Marconi Union	Just Music Café Vol. 4: The Ambient Zone	480.0	true	false
 search	1740042	Weightless	Marconi Union	Just Music Café Vol. 4: The Ambient Zone	480.0	true	false
 search	1740043	Weightless	Marconi Union	Cafe Del Mar - SunScapes	480.0	true	false

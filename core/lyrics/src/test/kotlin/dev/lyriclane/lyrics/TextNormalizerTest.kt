@@ -45,3 +45,29 @@ class TextNormalizerTest {
         assertThat(TextNormalizer.similarity("Bohemian Rhapsody", "Thriller")).isEqualTo(0.0)
     }
 }
+
+class WithoutDecorationsTest {
+
+    @Test
+    fun `strips Spotify decorations but keeps the real title`() {
+        assertThat(TextNormalizer.withoutDecorations("Bohemian Rhapsody - Remastered 2011"))
+            .isEqualTo("Bohemian Rhapsody")
+        assertThat(TextNormalizer.withoutDecorations("Stay (feat. Justin Bieber)"))
+            .isEqualTo("Stay")
+        assertThat(TextNormalizer.withoutDecorations("Come Together - Remastered 2009"))
+            .isEqualTo("Come Together")
+    }
+
+    @Test
+    fun `keeps capitals and punctuation, unlike normalize`() {
+        val title = "Don't Stop Believin'"
+
+        assertThat(TextNormalizer.withoutDecorations(title)).isEqualTo(title)
+    }
+
+    @Test
+    fun `an undecorated title is returned unchanged`() {
+        assertThat(TextNormalizer.withoutDecorations("Blinding Lights"))
+            .isEqualTo("Blinding Lights")
+    }
+}

@@ -12,10 +12,30 @@ class LrclibSource(private val client: LrclibClient) : LyricsSource {
     override suspend fun lookUp(identity: TrackIdentity): List<LyricsCandidate> {
         val direct = client.get(identity)
         val searched = client.search(identity.title, identity.artist)
+
+        // Spotify decorates titles ("- Remastered 2011", "(feat. ...)").
+        // LRCLIB usually copes, but when a decorated title finds nothing it is
+        // worth one more request with the decorations stripped.
+        val fallback = if (searched.isEmpty()) {
+            val plainTitle = TextNormalizer.withoutDecorations(identity.title)
+            if (plainTitle.isNotBlank() && !plainTitle.equals(identity.title, ignoreCase = true)) {
+                client.search(plainTitle, identity.artist)
+            } else {
+                emptyList()
+            }
+        } else {
+            emptyList()
+        }
+
+        val seen = HashSet<Long>()
         return buildList {
-            direct?.let(::add)
-            // Drop the duplicate the search will usually also return.
-            addAll(searched.filterNot { candidate -> candidate.id == direct?.id })
+            direct?.let {
+                seen += it.id
+                add(it)
+            }
+            (searched + fallback).forEach { candidate ->
+                if (seen.add(candidate.id)) add(candidate)
+            }
         }
     }
 

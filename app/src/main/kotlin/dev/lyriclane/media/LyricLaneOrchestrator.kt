@@ -2,6 +2,7 @@ package dev.lyriclane.media
 
 import android.os.SystemClock
 import android.util.Log
+import dev.lyriclane.lyrics.LookupReport
 import dev.lyriclane.lyrics.LyricSyncEngine
 import dev.lyriclane.lyrics.LyricTimeline
 import dev.lyriclane.lyrics.LyricsCandidate
@@ -59,6 +60,10 @@ class LyricLaneOrchestrator @Inject constructor(
 
     private val _offsetMs = MutableStateFlow(0L)
     val offsetMs: StateFlow<Long> = _offsetMs.asStateFlow()
+
+    /** Why the last lookup ended as it did; shown when no lyrics were found. */
+    private val _lastLookup = MutableStateFlow<LookupReport?>(null)
+    val lastLookup: StateFlow<LookupReport?> = _lastLookup.asStateFlow()
 
     /** The two lines destined for the car. Also shown on the phone, for parity. */
     val display: Flow<CarDisplay> =
@@ -182,6 +187,7 @@ class LyricLaneOrchestrator @Inject constructor(
             // new track is the worst thing this app could do.
             engine.setTimeline(emptyList())
             _identity.value = track?.toIdentity()
+            _lastLookup.value = null
             _lyrics.value = if (track == null) LyricsResult.Idle else LyricsResult.Loading
             if (track != null) {
                 lyricsJob = scope.launch { loadLyrics(track) }
@@ -200,12 +206,13 @@ class LyricLaneOrchestrator @Inject constructor(
         _offsetMs.value = offset
         engine.setOffsetMs(offset)
 
-        val result = repository.lyricsFor(identity)
+        val lookup = repository.lyricsFor(identity)
         // The song may have changed while we were waiting on the network.
         if (identity != _identity.value) return
-        _lyrics.value = result
-        armTimeline(result, track.durationMs)
-        Log.i(TAG, "lyrics for ${track.title}: ${result.describe()}")
+        _lyrics.value = lookup.result
+        _lastLookup.value = lookup.report
+        armTimeline(lookup.result, track.durationMs)
+        Log.i(TAG, "lyrics for ${track.title}: ${lookup.result.describe()}")
     }
 
     private fun armTimeline(result: LyricsResult, durationMs: Long) {

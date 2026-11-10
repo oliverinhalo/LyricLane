@@ -1,214 +1,119 @@
 # LyricLane
 
-Shows the **current lyric line** of whatever Spotify is playing on an Android
-Auto screen — including the split-screen dashboard card — by publishing the
-lyric as MediaSession metadata.
+**Synced lyrics from Spotify, on your Android Auto screen.**
 
-Personal-use, sideloaded. Not published, no Spotify Web API login.
+Spotify shows lyrics on your phone but not in the car. LyricLane follows what
+Spotify is playing, looks the lyrics up, and publishes the current line as
+MediaSession metadata — which is the one thing Android Auto will render for a
+media app. Open LyricLane instead of Spotify in the car and the words appear on
+the now-playing screen and the split-screen dashboard card, while Spotify keeps
+playing underneath.
 
----
-
-## Why it is built this way
-
-Android Auto does not let a media app draw its own UI. The car renders the
-now-playing screen and the dashboard card itself, from the app's MediaSession
-metadata and playback state. So the only way to get a lyric onto the car screen
-is to **put the lyric where the song title normally goes**:
-
-| MediaSession field | LyricLane uses it for      |
-|--------------------|----------------------------|
-| `title`            | current lyric line         |
-| `artist`           | next lyric line (or song — artist) |
-| artwork            | Spotify's album art        |
-
-LyricLane therefore registers as a media app, mirrors Spotify's playback state
-without producing any audio of its own, and forwards play/pause/next/prev/seek
-back to Spotify. While driving you open **LyricLane** in Android Auto; Spotify
-keeps playing on the phone underneath.
+Personal project. Sideloaded, not on Play. No Spotify login.
 
 ---
 
-## Status: working end to end
+## Contents
 
-Phase 0 answered the question everything depended on: Android Auto **does**
-re-render MediaSession metadata live, on the now-playing screen and on the
-split-screen dashboard card. Phases 1 to 5 are built on top of that.
+- [How it works](#how-it-works)
+- [Install](#install)
+- [First run](#first-run)
+- [Using it in the car](#using-it-in-the-car)
+- [Settings](#settings)
+- [Where lyrics come from](#where-lyrics-come-from)
+- [When lyrics are wrong or missing](#when-lyrics-are-wrong-or-missing)
+- [What Android Auto will and will not let an app do](#what-android-auto-will-and-will-not-let-an-app-do)
+- [Building from source](#building-from-source)
+- [Testing on the Desktop Head Unit](#testing-on-the-desktop-head-unit)
+- [Project layout](#project-layout)
+- [Limitations](#limitations)
+- [Licence and credits](#licence-and-credits)
 
-What happens when you use it:
+---
 
-1. Spotify plays on the phone.
-2. LyricLane finds Spotify's media session, reads the track and follows the
-   playback position.
-3. It looks the lyrics up on LRCLIB, parses the LRC timings, and caches them.
-4. A sync engine wakes at the exact timestamp of each line.
-5. The line is published as the MediaSession title, so the car shows it.
+## How it works
 
-### First run
+Android Auto does not let a media app draw its own interface. The car renders
+the card itself, from the app's MediaSession metadata. So the only way to get a
+lyric onto the screen is to put it where the song title normally goes.
 
 ```
-install the APK  ->  open LyricLane  ->  grant notification access
-                 ->  press play in Spotify  ->  lyrics appear
+Spotify's MediaSession          what LyricLane does with it
+──────────────────────          ───────────────────────────
+track + live position     ──▶   look up lyrics (LRCLIB, then NetEase)
+                          ──▶   parse timings, cache in Room
+                          ──▶   sync engine sleeps until the next line is due
+                          ──▶   publish that line as MediaSession metadata
+                                                │
+                       play / pause / next ◀────┘  forwarded back to Spotify
 ```
 
-The app opens on a single screen with one button if notification access is
-missing, because nothing works without it. Once granted, that screen is
-replaced by the now-playing view by itself.
+LyricLane plays no audio and takes no audio focus. It reads Spotify's session
+through `MediaSessionManager`, which is why it needs notification-listener
+access — that is the only route Android gives one app to another's media
+session without a privileged permission.
 
-## Build and sideload
+The sync engine does not poll. It works out the current line, then sleeps until
+the exact timestamp of the next one, scaled by playback speed. Paused playback
+schedules nothing at all, so a paused phone does no work.
 
-Requires JDK 17+ and the Android SDK (platform 36, build-tools 35+).
+---
+
+## Install
+
+Grab the APK from [Releases](../../releases), or [build it yourself](#building-from-source).
 
 ```bash
-git clone https://github.com/oliverinhalo/LyricLane.git
-cd LyricLane
-echo "sdk.dir=$ANDROID_HOME" > local.properties   # or let Android Studio write it
-
-./gradlew :app:testDebugUnitTest     # unit tests
-./gradlew :app:assembleDebug         # -> app/build/outputs/apk/debug/app-debug.apk
-adb install -r app/build/outputs/apk/debug/app-debug.apk
+adb install -r LyricLane-debug.apk
 ```
 
-The debug build installs as `dev.lyriclane.debug`, so it can sit alongside a
-release build.
-
-Launch **LyricLane** on the phone once after installing: it connects to its own
-session (which starts the service) and asks for the notification permission that
-the media notification needs.
+Requires Android 8.0 (API 26) or newer, Spotify, and Android Auto.
 
 ---
 
-## Make a sideloaded app visible in Android Auto
+## First run
 
-Android Auto refuses apps that did not come from a trusted source unless you
-turn that check off. Both steps below are required.
+Three steps, in order. The app will not work until the first one is done, and
+will not appear in the car until the second is.
 
-### 1. Enable Android Auto developer mode (once per phone)
+### 1. Notification access
 
-1. **Settings → Apps → See all apps → Android Auto → Advanced →
-   Additional settings in the app**.
-2. Scroll to **About** at the bottom, tap **Version**.
-3. Tap the **Version and permission info** block **10 times**.
-4. The **Allow development settings?** dialog appears → **OK**.
+Open LyricLane. It shows a single screen with one button. Tap **Grant
+notification access**, enable LyricLane in the system list, and come back — the
+screen clears itself as soon as the system binds the listener.
 
-Developer options now live in the ⋮ overflow menu of Android Auto settings.
+LyricLane does not read your notifications. It asks the system for the active
+media session, finds Spotify's, and follows the track and playback position.
+The only thing that leaves your phone is the song title and artist, sent to a
+lyrics service to look the words up.
 
-### 2. Allow unknown sources
+### 2. Let Android Auto run a sideloaded app
 
-In Android Auto settings → ⋮ → **Developer settings** → enable
-**Unknown sources**.
+Android Auto silently hides media apps that did not come from a trusted
+source. No warning — the app simply is not in the list.
 
-This applies to media, messaging and parked apps — which covers LyricLane.
-Without it, LyricLane will not appear in the car launcher no matter what the
-manifest says.
+1. Android Auto settings → scroll to **About** → tap **Version**
+2. Tap the **Version and permission info** block **ten times** → **OK**
+3. ⋮ → **Developer settings** → turn on **Unknown sources**
+4. Force stop Android Auto and reconnect
 
----
+To check it worked without driving anywhere: Android Auto settings →
+**Customise launcher**. LyricLane should be in the list.
 
-## Test on the Desktop Head Unit (DHU)
+### 3. Play something
 
-The DHU runs the real Android Auto stack from your phone and projects it onto
-your desktop. It is the only way to see the dashboard card without a car.
-
-### Install the DHU
-
-1. In Android Studio: **SDK Manager → SDK Tools** tab → install
-   **Android Auto Desktop Head Unit Emulator**.
-   It lands in `$ANDROID_HOME/extras/google/auto/`.
-2. On macOS/Linux make it executable:
-
-   ```bash
-   cd "$ANDROID_HOME/extras/google/auto"
-   chmod +x ./desktop-head-unit
-   ```
-
-3. **Linux only.** DHU 2.x needs GLIBC ≥ 2.32 (`ldd --version`) plus:
-
-   ```bash
-   sudo apt-get install libc++1 libc++abi1
-   ```
-
-   Keep the bundled `libusb` next to the executable.
-
-### Connect the phone (ADB tunnelling)
-
-1. Enable Android Auto developer mode (above) and USB debugging.
-2. Android Auto settings → ⋮ → **Start head unit server**. A foreground
-   notification confirms it is running.
-3. Android Auto settings → **Previously connected cars** → make sure
-   **Add new cars to Android Auto** is on.
-4. Plug the phone in over USB and **unlock the screen**.
-5. Forward the port and start the DHU:
-
-   ```bash
-   adb forward tcp:5277 tcp:5277
-   cd "$ANDROID_HOME/extras/google/auto"
-   ./desktop-head-unit
-   ```
-
-6. First run only: accept the terms and permission prompts **on the phone**.
-   The DHU may exit once while doing this — start it again.
-
-If the DHU shows a blank screen: quit it, toggle **Start head unit server** off
-and on, and relaunch.
-
-### Use a wide screen so the dashboard card appears
-
-The split-screen dashboard (media card + navigation) only shows up on a
-widescreen head unit. Put this in `~/.android/headunit.ini`, or pass it with
-`-c`:
-
-```ini
-[general]
-touch = true
-resolution = 1920x1080
-dpi = 160
-framerate = 30
-
-# Adds a separate window that prints playback-status messages as they arrive —
-# the quickest way to see how often the head unit actually picks up a metadata
-# change.
-playbackstatus = true
-```
-
-```bash
-./desktop-head-unit -c ~/.android/headunit.ini
-```
-
-Useful DHU console commands while testing:
-
-| Command | Does |
-|---|---|
-| `keycode media` | jump to the default media app |
-| `screenshot shot.png` | save a screenshot |
-| `day` / `night` | day / night mode |
-| `focus video off` | simulate the head unit hiding Android Auto |
-| `restrict all` | simulate driving restrictions |
-| `help` | full command set |
+Press play in Spotify, open LyricLane on the phone. The lyrics should fill the
+screen with the current line highlighted and scrolling. The card marked **"On
+the car screen"** shows the two lines the car is being sent, verbatim — if that
+card is right, the car will be right.
 
 ---
 
-## Trying it
+## Using it in the car
 
-### The quick check (phone only, no car)
-
-1. Install the APK and open **LyricLane**.
-2. Grant notification access when it asks. Come back to the app; the onboarding
-   screen disappears on its own.
-3. Press play on a well-known song in Spotify.
-4. LyricLane's now-playing screen fills with the lyrics, the active line
-   highlighted and scrolling itself.
-5. The card labelled **"On the car screen"** shows the two lines the car is
-   being sent, verbatim. If that card is right, the car will be right.
-
-```bash
-adb logcat -s LyricLane
-```
-shows which lyrics were found for each track and why a lookup failed.
-
-### In the car (or on the DHU)
-
-Open **LyricLane** from the car's media apps instead of Spotify. Spotify keeps
-playing underneath; LyricLane shows its lyric and forwards play, pause, next,
-previous and seek back to it.
+Open **LyricLane** from the car's media apps, not Spotify. Spotify keeps
+playing; LyricLane shows the words and forwards play, pause, next, previous and
+seek back to it.
 
 Three custom actions appear on the now-playing screen:
 
@@ -220,10 +125,100 @@ Three custom actions appear on the now-playing screen:
 
 Offsets are saved per song, so a track you corrected once stays corrected.
 
-### What the car lets us change, and what it does not
+### What you should see
 
-Android Auto renders the media card itself. A media app supplies metadata, not
-a layout, so these are **not ours to set** and no setting can change them:
+| Situation | On the car screen |
+|---|---|
+| Synced lyrics found | current line, with the next line under it |
+| Instrumental break | the upcoming line, as a head start |
+| Lyrics exist but untimed | "Lyrics not synced" + song and artist |
+| No lyrics found | song title + "No lyrics found" |
+| Offline, nothing cached | song title + "Lyrics unavailable · offline?" |
+| Spotify ad | "Advertisement" |
+| Podcast (over 15 minutes) | plain title/artist, no lookup |
+| Notification access missing | "Notification access needed" |
+| Spotify not playing | "Nothing playing on Spotify" |
+
+It never leaves the previous song's lyric on screen: the timeline is cleared
+before a new one loads.
+
+---
+
+## Settings
+
+| Setting | What it does |
+|---|---|
+| **Lyric size** | Phone screen only. Starts at 1.45×. |
+| **Which line the car shows large** | Android Auto draws the *subtitle* large and the title small above it — the opposite of what the names suggest. Switch this if your head unit does it the other way. |
+| **Lyric in the title too** | Instrument clusters and head-up displays read the title. This puts the lyric in both slots so the HUD gets it without the card losing it. |
+| **Smaller line in the car** | Next line, previous line, or song and artist. Previous line helps when timing drifts. |
+| **Two lines in one slot** | Experimental. Sends current and next together with a newline, in case your head unit wraps it. |
+| **Album art** | The car decides how big the cover is; turning it off is the only lever for giving words more of the card. |
+| **Show lyrics** | Off mirrors plain title and artist. |
+| **Default timing offset** | Applied to songs you have not adjusted individually. |
+| **Minimum hold between lines** | How long a line stays before the next can replace it. Raise it if fast verses flicker; lower it for tighter sync. |
+| **Clear cache** | Drops cached lyrics and saved offsets. |
+
+---
+
+## Where lyrics come from
+
+Sources are tried in order and stop as soon as one has timed lyrics for a
+recording of the right length, so the usual path is a single request.
+
+1. **LRCLIB, word-timed.** Some entries carry a structured document with
+   per-line *end* times and per-word timings. Preferred, for two reasons.
+   Knowing when a line ends is what lets the car show the next line during an
+   instrumental break instead of leaving the last one sitting there. And when a
+   line is too long for the screen, its pieces hand over on the beat the next
+   word is actually sung rather than splitting the window evenly. Coverage is
+   partial — common on recent pop, absent on older catalogue.
+2. **LRCLIB, ordinary LRC.**
+3. **NetEase Cloud Music.** Public endpoints, no key. Often has a well-timed
+   file for tracks LRCLIB has missed.
+
+Both are community-contributed, so coverage and timing vary.
+
+### Why not Spotify's own lyrics
+
+Spotify has no lyrics API, official or otherwise. Its lyrics are licensed from
+Musixmatch and reachable only through an internal endpoint that expects a token
+lifted from a logged-in session and headers spoofed to look like Spotify's own
+client. That is circumventing an access control to pull licensed content into
+an unlicensed app, so LyricLane does not do it.
+
+Reading them off the screen does not work either, and not only on policy
+grounds: Android does not render the interface of a backgrounded app. While you
+are driving, Spotify is in the background with nothing drawn, so there would be
+nothing to read. It would also mean granting an app permission to read every
+screen on the phone.
+
+---
+
+## When lyrics are wrong or missing
+
+The phone screen tells you what each source reported, rather than a bare "no
+lyrics found" — how many candidates it saw, and how far off the closest one
+was. `adb logcat -s LyricLane` shows the same trail.
+
+| Symptom | Fix |
+|---|---|
+| Timing slightly off | **Earlier**/**Later** on the phone, or **Offset ±** in the car. Saved per song. |
+| Wrong song entirely | **Wrong lyrics?** searches by hand. Each result shows its duration and whether it is timed; picking one stores it for that track. |
+| Nothing found, but you are online | **Look again** drops the cached miss and retries. |
+| "20 found, none matched this recording" | The lyrics exist but for a different cut — a live or extended version. Use **Wrong lyrics?** |
+
+Cached misses expire after a day, and are discarded immediately when an update
+changes how matching works, so a fix takes effect without waiting.
+
+---
+
+## What Android Auto will and will not let an app do
+
+Worth being explicit, because it shapes everything above. A media app supplies
+metadata, not a layout.
+
+**Not settable by any app:**
 
 | | |
 |---|---|
@@ -232,185 +227,156 @@ a layout, so these are **not ours to set** and no setting can change them:
 | Album art size | the head unit's choice |
 | Number of text lines | two |
 
-What *is* ours, and is now adjustable in Settings:
+**Ours to choose:** which of the two fields each line goes in, what the second
+line carries, whether artwork is sent at all, and how often metadata is pushed.
 
-- **Which line the car shows large.** Android Auto draws the **subtitle** large
-  and white, with the title small and grey above it — the opposite of what the
-  field names suggest. Until v0.3.0 the current lyric went in the title, which
-  is why it appeared small and grey. It now goes in the large slot by default;
-  if your head unit does the opposite, flip "Which line the car shows large".
-- **What the smaller line carries** — next line, previous line, or song and
-  artist. Previous line helps when the timing is drifting.
-- **Lyric in the title too.** Instrument clusters and head-up displays read the
-  *title*, while the dashboard card draws the *subtitle* large. Moving the lyric
-  to satisfy one costs the other, so this puts it in both: the HUD gets it and
-  the card keeps it large, at the cost of the card showing the line twice, once
-  large and once small. Whether a given cluster shows media text at all is the
-  car's decision — test it with `instrumentcluster = true` in the DHU config.
-- **Album art on or off.** The car decides how big the cover is; turning it off
-  is the only lever we have for giving the words more of the card.
-- **Two lines in one slot** (experimental). Sends the current and next line
-  together separated by a newline, in case the head unit wraps them. If yours
-  just truncates, turn it back off.
+---
 
-On the phone, where we *do* control the layout, lyric size is a slider and
-starts at 1.45×.
+## Building from source
 
-### Where lyrics come from
+Needs JDK 17+ and the Android SDK (platform 36, build-tools 35+).
 
-Tried in order, stopping as soon as one has timed lyrics for a recording of the
-right length:
+```bash
+git clone https://github.com/oliverinhalo/LyricLane.git
+cd LyricLane
+echo "sdk.dir=$ANDROID_HOME" > local.properties   # Android Studio writes this for you
 
-1. **LRCLIB word-timed** — some entries carry a structured document with
-   per-line *end* times and **per-word** timings. These are preferred for two
-   reasons. Knowing when a line stops is what lets the car show the next line
-   during an instrumental break instead of leaving the last one sitting there.
-   And when a line is too long for the screen, its pieces hand over on the beat
-   the next word is actually sung, rather than splitting the window evenly and
-   drifting through any held note. Coverage is partial — common on recent pop,
-   rarer on older catalogue — and the app falls back to ordinary LRC without
-   complaint.
-2. **LRCLIB** — ordinary LRC.
-3. **NetEase Cloud Music** — public endpoints, no key. Often has a well-timed
-   LRC for tracks LRCLIB has missed. Its files open with credit lines timed at
-   00:00 (lyricist, composer); those are stripped.
-
-**Not Spotify's own lyrics.** Spotify has no lyrics API, official or otherwise.
-They are licensed from Musixmatch and reachable only through an internal
-endpoint that expects a token lifted from a logged-in session and headers
-spoofed to look like Spotify's own client — circumventing an access control to
-pull third-party licensed content into an unlicensed app, and fragile enough to
-break whenever Spotify changes the scheme.
-
-Reading them off the screen instead does not work either, and not only on
-policy grounds: Android does not render the UI of a backgrounded app. While
-you are driving, Spotify is in the background with no lyrics view drawn, so an
-accessibility scraper would have nothing to read. It would also require
-granting an app permission to read every screen on the phone, banking and
-messaging included, which is a bad trade for song lyrics.
-
-The closest legitimate equivalent is LRCLIB's word-timed data above, which is
-the same class of per-word timing — and on tracks that have it, the timing is
-as tight as anything Spotify shows. **Musixmatch itself has a developer API**;
-if you get your own key I can add it as a source, on your terms rather than by
-pretending to be someone else's client.
-
-### What you should see in each situation
-
-| Situation | On the car screen |
-|---|---|
-| Synced lyrics found | current line, with the next line under it |
-| Instrumental break | the upcoming line, as a head start |
-| Lyrics exist but untimed | "Lyrics not synced" + song and artist |
-| No lyrics on LRCLIB | song title + "No lyrics found" |
-| Offline, nothing cached | song title + "Lyrics unavailable · offline?" |
-| Spotify ad | "Advertisement" |
-| Podcast (over 15 minutes) | plain title/artist mirror, no lookup |
-| Notification access missing | "Notification access needed" |
-| Spotify not playing | "Nothing playing on Spotify" |
-
-It never leaves the previous song's lyric on screen: the timeline is cleared
-before the new one is loaded.
-
-### When the lyrics are wrong
-
-LRCLIB is community-contributed, and Spotify's track titles do not always match
-what a song is filed under there.
-
-- **Timing slightly off** — use Earlier/Later on the phone, or Offset ± in the
-  car. Saved per song.
-- **Wrong song entirely** — "Wrong lyrics?" on the now-playing screen searches
-  LRCLIB by hand. Each result shows its duration and whether it is synced;
-  picking one stores it for that track.
-- **Nothing found, but you have a connection** — "Look again" drops the cached
-  miss and retries.
-
-### Timing design, if you need to tune it
-
-The sync engine does not poll. It computes the current line, then sleeps until
-the exact timestamp of the next one, scaled by playback speed. Paused playback
-schedules nothing at all, which is what keeps it off the battery.
-
-Metadata pushes are rate-limited by a **minimum hold** (default 500 ms,
-adjustable in Settings). While it waits out that interval, newer lines *replace*
-the pending one rather than queueing, so a fast verse shows the line that is
-actually current — never a late one. Raise it if a head unit looks like it is
-flickering; lower it for tighter sync.
-
-## Project layout
-
+./gradlew test            # unit tests
+./gradlew assembleDebug   # app/build/outputs/apk/debug/
 ```
-app/                        the Android Auto session, the phone UI, DI wiring
-  media/LyricLaneService    MediaLibraryService: session, browse tree,
-                            custom actions; publishes the lyric as the title
-  media/LyricLaneOrchestrator  the brain: track changes -> lyrics -> timeline
-                            -> current line -> two lines of text
-  media/SettingsStore       four persisted settings
-  ui/                       Compose: onboarding, now playing, picker, settings
-core/spotify/               reads Spotify's own MediaSession
-  SpotifyWatcher            follows track + playback; relays transport back
-  SpotifyNotificationListener  exists only to be granted listener access
-  NotificationAccess        permission check and the settings intent
-core/lyrics/                everything about words and time
-  LrclibClient              /api/get then /api/search, over plain OkHttp
-  LrcParser                 LRC: multiple stamps, offset tags, gaps
-  LyricsMatcher             picks the right recording out of 20 candidates
-  LyricTimeline             line splitting and the current-line lookup
-  LyricSyncEngine           wakes at the next line; no polling
-  LyricsRepository          cache first, network second, offline-safe
-  LyricsStore               Room: lyrics cache + per-song offsets
-core/media/                 the car-facing presentation
-  MirrorPlayer              SimpleBasePlayer that describes, never plays
-  CarDisplayFormatter       two lines for every possible state
-  MetadataPacing            minimum hold without ever showing a stale line
-  Artwork                   album art downscaled to survive Binder
-```
+
+The debug build installs as `dev.lyriclane.debug` so it can sit beside a
+release build.
 
 ### Tests
 
 ```bash
-./gradlew :core:lyrics:testDebugUnitTest
+./gradlew :core:lyrics:testDebugUnitTest :core:media:testDebugUnitTest
 ```
 
-Covering the parts where a bug is invisible until you are driving:
+Covering the places where a bug is invisible until you are driving:
 
-- **LRC parser** — centiseconds and milliseconds, minutes past 59, a chorus
-  with several timestamps, ID tags, `[offset:]` in both directions, blank lines
-  as gaps, unsorted files, untimed junk.
+- **LRC parser** — centiseconds and milliseconds, minutes past 59, a chorus with
+  several timestamps, ID tags, `[offset:]` in both directions, blank lines as
+  gaps, unsorted files.
+- **Word-timed parser** — line starts and ends, per-word timings, word entries
+  kept out of the line list, malformed documents rejected cleanly.
 - **Matcher** — rejects a different-length recording, rejects a wrong song that
-  happens to share a runtime, prefers synced over plain, prefers the closest
-  duration, copes with "- Remastered 2011" and "(feat. ...)".
-- **Timeline** — current-line lookup at boundaries and past the end, long-line
-  splitting only when there is time to read the pieces, never cutting mid-word.
-- **Sync engine** — driven entirely by a fake clock on virtual time: advances
-  exactly on the timestamp, freezes when paused (an hour of clock passes and the
-  line does not move), resyncs forwards and backwards on seek, scales with
-  playback speed, applies offsets, and does not spin on lines that share a
-  timestamp.
+  shares a runtime, prefers timed over untimed, copes with "- Remastered 2011"
+  and "(feat. …)". Runs against **recorded real LRCLIB responses** for sixteen
+  tracks, including the twenty near-duplicates a popular song really returns.
+- **Repository** — cache hits skip the network, misses expire, a miss from an
+  older build is retried at once, an outage serves stale lyrics instead of
+  nothing.
+- **Sync engine** — driven by a fake clock on virtual time: advances exactly on
+  the timestamp, freezes when paused, resyncs on seek in both directions,
+  scales with playback speed, does not spin on lines sharing a timestamp.
+- **Car display** — every state produces two sensible lines; the lyric always
+  lands in the slot the head unit draws large.
 
-## Known limitations
+Fixture lyrics are replaced with placeholder words. Only the structure matters
+to the tests, and song lyrics are not ours to redistribute.
 
-- **No custom car UI.** Only MediaSession metadata reaches the screen, so the
-  car can show at most the current line plus one more. A platform limit, not a
-  design choice.
-- **Two lines maximum, never animated.** Deliberate. No scrolling text, no
-  animation; long lines are split at word boundaries or truncated.
-- **Spotify must be playing on the phone.** LyricLane reads Spotify's
-  MediaSession and has no audio of its own. If Spotify is closed, the card says
-  so.
-- **Needs notification-listener access**, because that is the only way Android
-  lets one app read another's media session without a privileged permission.
-- **Needs "Unknown sources"** in Android Auto's developer settings, because it
-  is sideloaded.
-- **Lyrics are community-contributed** (LRCLIB, NetEase): coverage and timing
-  vary, especially outside well-known songs. Hence the per-song offset and the
-  manual picker.
-- **Text size, colour and album art size in the car are not settable.** Android
-  Auto draws the card; media apps supply metadata, not a layout.
+---
+
+## Testing on the Desktop Head Unit
+
+The DHU runs the real Android Auto stack from your phone on your desktop. It is
+the only way to see the dashboard card without a car.
+
+1. Android Studio → **SDK Manager → SDK Tools** → install **Android Auto
+   Desktop Head Unit Emulator**. It lands in `$ANDROID_HOME/extras/google/auto/`.
+2. `chmod +x ./desktop-head-unit` (macOS/Linux). On Linux it also needs GLIBC
+   2.32+ and `libc++1 libc++abi1`.
+3. On the phone: Android Auto settings → ⋮ → **Start head unit server**, and
+   check **Previously connected cars → Add new cars** is on.
+4. Plug in over USB, unlock the phone, then:
+
+```bash
+adb forward tcp:5277 tcp:5277
+cd "$ANDROID_HOME/extras/google/auto"
+./desktop-head-unit
+```
+
+The split-screen dashboard only appears on a widescreen head unit. Put this in
+`~/.android/headunit.ini`:
+
+```ini
+[general]
+touch = true
+resolution = 1920x1080
+dpi = 160
+framerate = 30
+
+# A separate window printing playback-status messages as they arrive —
+# the quickest way to see how often the head unit picks up a metadata change.
+playbackstatus = true
+
+# Emulates an instrument cluster, for testing "Lyric in the title too".
+instrumentcluster = true
+```
+
+Useful console commands: `screenshot shot.png`, `day` / `night`,
+`focus video off`, `restrict all`, `help`.
+
+---
+
+## Project layout
+
+```
+app/                          Android Auto session, phone UI, DI
+  media/LyricLaneService      MediaLibraryService: session, browse tree,
+                              custom actions; publishes the lyric
+  media/LyricLaneOrchestrator track changes → lyrics → timeline → current line
+  media/SettingsStore         persisted settings
+  ui/                         Compose: onboarding, now playing, picker, settings
+core/spotify/                 reads Spotify's own MediaSession
+  SpotifyWatcher              follows track and playback; relays transport back
+  SpotifyNotificationListener exists only to be granted listener access
+core/lyrics/                  words and time
+  LrclibSource, NeteaseSource the two catalogues
+  LrcParser                   LRC: multiple stamps, offset tags, gaps
+  LyricsFileParser            LRCLIB's word-timed document
+  LyricsMatcher               picks the right recording out of 20 candidates
+  LyricTimeline               line splitting, current-line lookup
+  LyricSyncEngine             wakes at the next line; no polling
+  LyricsRepository            cache first, network second, offline-safe
+core/media/                   car-facing presentation
+  MirrorPlayer                SimpleBasePlayer that describes, never plays
+  CarDisplayFormatter         two lines for every possible state
+  CarSlotMapping              which metadata field each line goes in
+  MetadataPacing              rate limiting without ever showing a stale line
+```
+
+---
+
+## Limitations
+
+- **Two lines maximum in the car, never animated.** A platform limit, and a
+  deliberate safety choice: no scrolling text, no animation, long lines split at
+  word boundaries or truncated.
+- **Spotify must be playing on the phone.** LyricLane has no audio of its own.
+- **Needs notification-listener access**, and **Unknown sources** in Android
+  Auto because it is sideloaded.
+- **Lyrics are community-contributed.** Coverage and timing vary, especially
+  outside well-known songs.
 - **Timing follows Spotify's reported position**, which it publishes only when
-  something changes. A head unit a few hundred milliseconds out is normal; that
+  something changes. A head unit a few hundred milliseconds out is normal — that
   is what the offset is for.
-- **Podcasts and audiobooks are skipped** — anything over 15 minutes is treated
-  as spoken word and mirrors plain title/artist rather than wasting a lookup.
-- **Sideload only.** Reading another app's media session and re-presenting it is
+- **Podcasts and audiobooks are skipped** — anything over 15 minutes mirrors
+  plain title and artist rather than wasting a lookup.
+- **Not for Play.** Reading another app's media session and re-presenting it is
   not something Google Play would accept, and it is not meant to be published.
+
+---
+
+## Licence and credits
+
+Source code under the [MIT licence](LICENSE). Lyrics are not covered by it and
+remain the property of their rights holders.
+
+Lyrics from [LRCLIB](https://lrclib.net) and
+[NetEase Cloud Music](https://music.163.com), contributed by their communities.
+Built with [Media3](https://developer.android.com/media/media3).
+
+LyricLane is not affiliated with Spotify, Google or Android Auto.

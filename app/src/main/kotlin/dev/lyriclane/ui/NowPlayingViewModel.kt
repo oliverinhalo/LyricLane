@@ -28,6 +28,7 @@ class NowPlayingViewModel @Inject constructor(
     val frame = orchestrator.frame
     val identity = orchestrator.identity
     val offsetMs = orchestrator.offsetMs
+    val lastLookup = orchestrator.lastLookup
     val settings = settingsStore.settings
 
     /** Exactly what the car is being shown, so the phone can verify it. */

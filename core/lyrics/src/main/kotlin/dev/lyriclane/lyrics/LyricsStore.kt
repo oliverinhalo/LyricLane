@@ -30,6 +30,11 @@ data class CachedLyrics(
     val instrumental: Boolean,
     val notFound: Boolean,
     val fetchedAtMs: Long,
+    /**
+     * Which generation of the matching logic wrote this row. A "not found"
+     * recorded by an older build should not outlive the build that fixes it.
+     */
+    val epoch: Int = 0,
 )
 
 /** A per-song timing correction, in milliseconds. Positive shows lyrics sooner. */
@@ -69,9 +74,10 @@ interface LyricsDao {
 
 @Database(
     entities = [CachedLyrics::class, TrackOffset::class],
-    // v2 added the structured-lyrics and source columns. The cache is
-    // reconstructible from the network, so it is dropped rather than migrated.
-    version = 2,
+    // v3 added the epoch column. The cache is reconstructible from the
+    // network, so it is dropped rather than migrated — which also clears any
+    // stale "not found" rows left by earlier builds.
+    version = 3,
     exportSchema = false,
 )
 abstract class LyricsDatabase : RoomDatabase() {

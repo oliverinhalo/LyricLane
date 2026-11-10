@@ -1,6 +1,7 @@
 package dev.lyriclane.lyrics
 
 import android.util.Log
+import kotlin.math.abs
 
 /**
  * Lyrics for a track: cache first, then each source in turn.
@@ -19,28 +20,34 @@ class LyricsRepository(
     private val nowMs: () -> Long = System::currentTimeMillis,
 ) {
 
-    suspend fun lyricsFor(identity: TrackIdentity): LyricsResult {
+    suspend fun lyricsFor(identity: TrackIdentity): LyricsLookup {
         val key = identity.cacheKey
 
         dao.find(key)?.let { cached ->
-            if (!cached.isStale(nowMs())) return cached.toResult(fromCache = true)
+            if (!cached.isStale(nowMs())) return LyricsLookup(cached.toResult(fromCache = true))
         }
 
+        val attempts = ArrayList<LookupReport.Attempt>()
         return try {
-            val candidate = resolve(identity)
+            val candidate = resolve(identity, attempts)
+            val report = LookupReport(attempts)
+            Log.i(TAG, "lookup \"${identity.title}\": " + report.summary().replace('\n', '|'))
             if (candidate == null) {
                 dao.put(negativeEntry(identity))
-                LyricsResult.NotFound
+                LyricsLookup(LyricsResult.NotFound, report)
             } else {
                 dao.put(candidate.toCacheEntry(identity, nowMs()))
-                candidate.toResult(fromCache = false)
+                LyricsLookup(candidate.toResult(fromCache = false), report)
             }
         } catch (e: LrclibClient.LookupFailure) {
             Log.w(TAG, "lyrics lookup failed for ${identity.title}", e)
             // Serve a stale entry rather than nothing when the network is gone:
             // stale lyrics are still the right lyrics.
-            dao.find(key)?.toResult(fromCache = true)
-                ?: LyricsResult.Error(e.message ?: "Could not reach a lyrics source")
+            val stale = dao.find(key)?.toResult(fromCache = true)
+            LyricsLookup(
+                result = stale ?: LyricsResult.Error(e.message ?: "Could not reach a lyrics source"),
+                report = LookupReport(attempts),
+            )
         }
     }
 
@@ -78,7 +85,10 @@ class LyricsRepository(
 
     // --- internals ------------------------------------------------------------------
 
-    private suspend fun resolve(identity: TrackIdentity): LyricsCandidate? {
+    private suspend fun resolve(
+        identity: TrackIdentity,
+        attempts: MutableList<LookupReport.Attempt>,
+    ): LyricsCandidate? {
         var best: LyricsCandidate? = null
         var bestScore = Double.NEGATIVE_INFINITY
         var lastFailure: LrclibClient.LookupFailure? = null
@@ -90,16 +100,40 @@ class LyricsRepository(
                 // One source being unreachable must not sink the others.
                 Log.w(TAG, "lookup failed on ${source.id}", e)
                 lastFailure = e
+                attempts += LookupReport.Attempt(
+                    source = source.id,
+                    candidates = 0,
+                    accepted = 0,
+                    error = e.message ?: "unreachable",
+                )
                 continue
             }
 
+            var accepted = 0
+            var closest: LyricsCandidate? = null
+            var closestDelta = Long.MAX_VALUE
+
             for (candidate in candidates) {
+                val delta = abs((candidate.durationSeconds * 1000.0) - identity.durationMs).toLong()
+                if (delta < closestDelta) {
+                    closestDelta = delta
+                    closest = candidate
+                }
                 val score = LyricsMatcher.score(identity, candidate) ?: continue
+                accepted++
                 if (score > bestScore) {
                     bestScore = score
                     best = candidate
                 }
             }
+
+            attempts += LookupReport.Attempt(
+                source = source.id,
+                candidates = candidates.size,
+                accepted = accepted,
+                bestTitle = closest?.trackName,
+                closestDurationDeltaMs = closest?.let { closestDelta },
+            )
             // Good enough to stop asking: same recording length, timed lyrics.
             val settled = best?.let { LyricsMatcher.isConfident(identity, it) } == true
             if (settled) break
@@ -122,6 +156,7 @@ class LyricsRepository(
         instrumental = false,
         notFound = true,
         fetchedAtMs = nowMs(),
+        epoch = CACHE_EPOCH,
     )
 
     private fun LyricsCandidate.toCacheEntry(identity: TrackIdentity, now: Long) = CachedLyrics(
@@ -135,6 +170,7 @@ class LyricsRepository(
         instrumental = instrumental,
         notFound = false,
         fetchedAtMs = now,
+        epoch = CACHE_EPOCH,
     )
 
     private fun LyricsCandidate.toResult(fromCache: Boolean): LyricsResult =
@@ -191,12 +227,24 @@ class LyricsRepository(
      * Positive hits never expire — lyrics do not change. Misses are retried
      * after a week, because these catalogues are community-contributed and grow.
      */
-    private fun CachedLyrics.isStale(now: Long): Boolean =
-        notFound && now - fetchedAtMs > NEGATIVE_TTL_MS
+    private fun CachedLyrics.isStale(now: Long): Boolean = when {
+        !notFound -> false
+        // A miss recorded by an older generation of the matching logic must not
+        // outlive the release that fixed whatever caused it.
+        epoch != CACHE_EPOCH -> true
+        else -> now - fetchedAtMs > NEGATIVE_TTL_MS
+    }
 
     companion object {
         private const val TAG = "LyricLane"
 
-        val NEGATIVE_TTL_MS = 7L * 24 * 60 * 60 * 1000
+        /**
+         * Bump whenever matching or source selection changes, so misses
+         * recorded under the previous behaviour are retried, not trusted.
+         */
+        const val CACHE_EPOCH = 2
+
+        /** Re-checking a miss costs one request, so re-check often. */
+        val NEGATIVE_TTL_MS = 24L * 60 * 60 * 1000
     }
 }

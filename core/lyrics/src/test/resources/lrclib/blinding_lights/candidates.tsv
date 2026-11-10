@@ -1,16 +1,16 @@
-source	id	trackName	artistName	albumName	duration	instrumental	hasSynced
+source	id	trackName	artistName	albumName	duration	instrumental	hasWordSync
 get	390	Blinding Lights	The Weeknd	After Hours	200.0	false	true
-search	7178536	Blinding Lights	The Weeknd	The Weeknd Videos	263.0	false	true
-search	8277104	Blinding Lights	The Weeknd	Happy Pop (2023)	200.0	false	true
+search	7178536	Blinding Lights	The Weeknd	The Weeknd Videos	263.0	false	false
+search	8277104	Blinding Lights	The Weeknd	Happy Pop (2023)	200.0	false	false
 search	7373035	Blinding Lights	The Weeknd	Essentials (2020)	200.0	false	true
 search	7183276	Blinding Lights	The Weeknd	Summer Forever	204.0	false	true
 search	7802646	Blinding Lights	The Weeknd	Greatest Hits Ever Vol. 3 (Hi-Res Masters)	200.0	false	true
-search	8131965	Blinding Lights	The Weeknd	Now That's What I Call Music! 105 - CD 1	200.0	false	true
-search	8384652	Blinding Lights	The Weeknd	The Highlights (Deluxe)	200.0	false	true
-search	7517841	Blinding Lights	The Weeknd	Blinding Lights	261.0	false	true
+search	8131965	Blinding Lights	The Weeknd	Now That's What I Call Music! 105 - CD 1	200.0	false	false
+search	8384652	Blinding Lights	The Weeknd	The Highlights (Deluxe)	200.0	false	false
+search	7517841	Blinding Lights	The Weeknd	Blinding Lights	261.0	false	false
 search	7518109	Blinding Lights	The Weeknd	E	200.0	false	true
 search	7220762	Blinding Lights	The Weeknd	Top UAE 2023	200.0	false	true
-search	5017992	Blinding Lights	The Weeknd	Live At SoFi Stadium	254.0	false	true
+search	5017992	Blinding Lights	The Weeknd	Live At SoFi Stadium	254.0	false	false
 search	5512759	Blinding Lights	The Weeknd	After Hours	203.0	false	true
 search	5573837	Blinding Lights	The Weeknd	Best of 2023 Italia Pop Hits	200.0	false	true
 search	5614529	Blinding Lights	The Weeknd	miles's playlist	200.0	false	true
@@ -18,5 +18,5 @@ search	5393934	Blinding Lights	The Weeknd	US Hits	200.0	false	true
 search	4691533	Blinding Lights	The Weeknd	Now #1s - 70 Years Of The Official Singles Chart	200.0	false	true
 search	4869737	Blinding Lights	The Weeknd	NRJ Good Vibes Only 2021	200.0	false	true
 search	5112833	Blinding Lights	The Weeknd	Now That's What I Call Music 74	200.0	false	true
-search	5793717	Blinding Lights	The Weeknd	null	263.0	false	true
+search	5793717	Blinding Lights	The Weeknd	null	263.0	false	false
 search	5072602	Blinding Lights	The Weeknd	Blinding Lights - Single	203.0	false	true

@@ -70,6 +70,32 @@ class LyricsPipelineTest {
     private fun fixture(case: String): Fixture =
         fixtures().single { it.case == case }
 
+    /** Cases that should yield timed lyrics: everything real and sung. */
+    private val sungCases = listOf(
+        "bohemian_rhapsody", "stay_feat", "blinding_lights", "anti_hero", "as_it_was",
+        "cruel_summer", "mr_brightside", "sweet_child", "dont_stop_believin",
+        "levitating_feat", "shape_of_you", "all_too_well_10",
+        "come_together_remastered", "rolling_in_the_deep",
+    )
+
+    @Test
+    fun `every popular song finds timed lyrics`() {
+        // Titles are written exactly as Spotify reports them, decorations and
+        // all. LRCLIB has every one of these; anything failing here is our
+        // matching rejecting a result it should have taken.
+        val failures = sungCases.mapNotNull { case ->
+            val f = fixture(case)
+            val best = LyricsMatcher.bestMatch(f.identity, f.candidates)
+            when {
+                best == null -> "$case: no match at all (${f.candidates.size} candidates)"
+                !best.hasSynced -> "$case: matched but unsynced (${best.trackName})"
+                else -> null
+            }
+        }
+
+        assertThat(failures).isEmpty()
+    }
+
     @Test
     fun `fixtures loaded`() {
         val all = fixtures()
