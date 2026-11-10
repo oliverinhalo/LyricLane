@@ -122,14 +122,14 @@ class LyricLaneService : MediaLibraryService() {
                 .collect { display ->
                     // Which field the head unit renders large is a setting,
                     // because Android Auto draws the *subtitle* big and other
-                    // units may not.
-                    when (settings.current.carTextSlots) {
-                        CarTextSlots.SUBTITLE_IS_BIG ->
-                            player.setDisplayText(display.secondary, display.primary)
-
-                        CarTextSlots.TITLE_IS_BIG ->
-                            player.setDisplayText(display.primary, display.secondary)
-                    }
+                    // units may not; and a cluster or head-up display reads the
+                    // title, which is a third screen with its own opinion.
+                    val fields = CarSlotMapping.map(
+                        display = display,
+                        slots = settings.current.carTextSlots,
+                        lyricInTitle = settings.current.lyricInTitle,
+                    )
+                    player.setDisplayText(fields.title, fields.subtitle)
                 }
         }
     }

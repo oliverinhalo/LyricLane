@@ -60,6 +60,7 @@ class NowPlayingViewModel @Inject constructor(
     fun setSecondaryLine(mode: SecondaryLine) = settingsStore.setSecondaryLine(mode)
     fun setCarTextSlots(slots: CarTextSlots) = settingsStore.setCarTextSlots(slots)
     fun setShowArtwork(show: Boolean) = settingsStore.setShowArtwork(show)
+    fun setLyricInTitle(enabled: Boolean) = settingsStore.setLyricInTitle(enabled)
     fun setPackTwoLines(pack: Boolean) = settingsStore.setPackTwoLines(pack)
     fun setLyricTextScale(scale: Float) = settingsStore.setLyricTextScale(scale)
     fun setDefaultOffset(ms: Long) = settingsStore.setDefaultOffsetMs(ms)

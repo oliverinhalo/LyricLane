@@ -241,6 +241,12 @@ What *is* ours, and is now adjustable in Settings:
   if your head unit does the opposite, flip "Which line the car shows large".
 - **What the smaller line carries** — next line, previous line, or song and
   artist. Previous line helps when the timing is drifting.
+- **Lyric in the title too.** Instrument clusters and head-up displays read the
+  *title*, while the dashboard card draws the *subtitle* large. Moving the lyric
+  to satisfy one costs the other, so this puts it in both: the HUD gets it and
+  the card keeps it large, at the cost of the card showing the line twice, once
+  large and once small. Whether a given cluster shows media text at all is the
+  car's decision — test it with `instrumentcluster = true` in the DHU config.
 - **Album art on or off.** The car decides how big the cover is; turning it off
   is the only lever we have for giving the words more of the card.
 - **Two lines in one slot** (experimental). Sends the current and next line

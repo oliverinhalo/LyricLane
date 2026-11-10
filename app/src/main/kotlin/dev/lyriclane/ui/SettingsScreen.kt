@@ -112,6 +112,35 @@ fun SettingsScreen(viewModel: NowPlayingViewModel) {
         Spacer(Modifier.height(16.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
+                Text(
+                    "Lyric in the title too",
+                    style = MaterialTheme.typography.titleMedium,
+                )
+                Text(
+                    if (settings.carTextSlots == CarTextSlots.TITLE_IS_BIG) {
+                        "Already on: with the title set as the large line, the " +
+                            "lyric is in the title anyway."
+                    } else {
+                        "Instrument clusters and head-up displays read the title, " +
+                            "while the dashboard card draws the subtitle large. " +
+                            "This puts the lyric in both, so it reaches the HUD " +
+                            "without the card losing it. The card then shows the " +
+                            "line twice, once large and once small."
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+            Switch(
+                checked = settings.lyricInTitle ||
+                    settings.carTextSlots == CarTextSlots.TITLE_IS_BIG,
+                enabled = settings.carTextSlots != CarTextSlots.TITLE_IS_BIG,
+                onCheckedChange = viewModel::setLyricInTitle,
+            )
+        }
+
+        Spacer(Modifier.height(16.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
                 Text("Album art", style = MaterialTheme.typography.titleMedium)
                 Text(
                     "The car decides how big the cover is. Turning it off is the " +
