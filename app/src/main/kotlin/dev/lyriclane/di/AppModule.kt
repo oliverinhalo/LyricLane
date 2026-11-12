@@ -13,6 +13,10 @@ import dev.lyriclane.lyrics.LyricsDatabase
 import dev.lyriclane.lyrics.LyricsRepository
 import dev.lyriclane.lyrics.LyricsSource
 import dev.lyriclane.lyrics.NeteaseSource
+import dev.lyriclane.media.SettingsStore
+import dev.lyriclane.recognize.AcrCloudRecognizer
+import dev.lyriclane.recognize.MicSampler
+import dev.lyriclane.recognize.SongRecognizer
 import dev.lyriclane.spotify.SpotifyWatcher
 import java.util.concurrent.TimeUnit
 import javax.inject.Singleton
@@ -69,4 +73,17 @@ object AppModule {
     @Singleton
     fun spotifyWatcher(@ApplicationContext context: Context): SpotifyWatcher =
         SpotifyWatcher(context)
+
+    @Provides
+    @Singleton
+    fun micSampler(): MicSampler = MicSampler()
+
+    /**
+     * Credentials are read at call time rather than captured, so pasting a key
+     * into settings takes effect without restarting anything.
+     */
+    @Provides
+    @Singleton
+    fun songRecognizer(http: OkHttpClient, settings: SettingsStore): SongRecognizer =
+        AcrCloudRecognizer(http, configProvider = { settings.current.recognition })
 }

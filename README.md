@@ -125,6 +125,30 @@ Three custom actions appear on the now-playing screen:
 
 Offsets are saved per song, so a track you corrected once stays corrected.
 
+### When Spotify is not the source
+
+For the car radio, a passenger's phone, a CD — anything LyricLane cannot read
+directly — tap **Identify what's playing** in the car's browse list, or the
+button on the phone screen. It records about eight seconds, asks a recognition
+service what it is, and syncs from the position the service reports.
+
+Three things to know before relying on it:
+
+- **It needs credentials of your own.** There is no free unmetered recognition
+  service, so there is no key to ship. Make an ACRCloud audio project and paste
+  its host, access key and secret into Settings. Blank credentials simply
+  disable the feature; everything else works without them.
+- **The position is an estimate and drifts.** Spotify reports its position
+  continuously and keeps correcting it; a recognition service tells you where
+  you were *once*, and the clock runs on from there. Expect to nudge it with
+  Earlier/Later, and to re-identify after a while.
+- **Spotify always wins.** If Spotify has a track, that is what is shown. A
+  heard song only fills the silence, and lapses by itself when the song it
+  heard would have ended.
+
+It needs microphone permission, asked for the first time you use it, and
+nothing is recorded unless you tap the button.
+
 ### Settings, without picking up your phone
 
 Android Auto gives a media app no way to show a settings screen, so LyricLane
@@ -170,6 +194,7 @@ before a new one loads.
 | **Default timing offset** | Applied to songs you have not adjusted individually. |
 | **Minimum hold between lines** | How long a line stays before the next can replace it. Raise it if fast verses flicker; lower it for tighter sync. |
 | **Clear cache** | Drops cached lyrics and saved offsets. |
+| **Identify songs by ear** | Host, access key and secret for a recognition service of your own. Leave blank to disable. |
 
 ---
 
@@ -294,6 +319,11 @@ Covering the places where a bug is invisible until you are driving:
   scales with playback speed, does not spin on lines sharing a timestamp.
 - **Car display** — every state produces two sensible lines; the lyric always
   lands in the slot the head unit draws large.
+- **Recognition** — the request signature is pinned against an independent
+  HMAC-SHA1 implementation, because a wrong one comes back as a bare
+  authentication error with no clue which of the six signed fields is off. WAV
+  headers are checked field by field, and every documented response shape is
+  parsed, including "no result", an auth failure, and outright nonsense.
 
 Fixture lyrics are replaced with placeholder words. Only the structure matters
 to the tests, and song lyrics are not ours to redistribute.
@@ -362,6 +392,10 @@ core/lyrics/                  words and time
   LyricTimeline               line splitting, current-line lookup
   LyricSyncEngine             wakes at the next line; no polling
   LyricsRepository            cache first, network second, offline-safe
+core/recognize/               identifying a song by ear
+  MicSampler                  records a short mono clip
+  WavEncoder                  wraps PCM in a WAV container
+  AcrCloudRecognizer          signs and posts it; reads back title and offset
 core/media/                   car-facing presentation
   MirrorPlayer                SimpleBasePlayer that describes, never plays
   CarDisplayFormatter         two lines for every possible state
@@ -386,6 +420,10 @@ core/media/                   car-facing presentation
   is what the offset is for.
 - **Podcasts and audiobooks are skipped** — anything over 15 minutes mirrors
   plain title and artist rather than wasting a lookup.
+- **Identification is a fallback, not an equal.** Spotify's session gives an
+  exact title and a position that keeps correcting itself. A microphone gives a
+  guess and a position that drifts, costs a network round trip, and needs
+  third-party credentials. Use it when there is no session to read.
 - **Not for Play.** Reading another app's media session and re-presenting it is
   not something Google Play would accept, and it is not meant to be published.
 

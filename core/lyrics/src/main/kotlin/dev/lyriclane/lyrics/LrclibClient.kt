@@ -133,6 +133,6 @@ class LrclibClient(
          * send a browser-like agent.
          */
         const val DEFAULT_USER_AGENT =
-            "LyricLane/1.1.0 (https://github.com/oliverinhalo/LyricLane)"
+            "LyricLane/1.2.0 (https://github.com/oliverinhalo/LyricLane)"
     }
 }

@@ -62,6 +62,19 @@ data class SpotifyState(
     val spotifyRunning: Boolean = false,
     val track: SpotifyTrack? = null,
     val playback: SpotifyPlayback? = null,
+    /**
+     * True when this state was assembled from a microphone identification
+     * rather than read from Spotify's session — the radio, someone else's
+     * playlist, anything LyricLane cannot see directly.
+     *
+     * It changes what the car is told when things go wrong, and it means the
+     * position is an estimate that drifts rather than a figure Spotify keeps
+     * correcting.
+     */
+    val fromMicrophone: Boolean = false,
 ) {
     val isPlaying: Boolean get() = playback?.isPlaying == true
+
+    /** Transport controls only mean something when Spotify is the source. */
+    val canControlPlayback: Boolean get() = !fromMicrophone && spotifyRunning
 }

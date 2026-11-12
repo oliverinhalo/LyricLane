@@ -18,13 +18,19 @@ import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.lyriclane.media.CarLineLength
+import dev.lyriclane.recognize.AcrCloudConfig
 import dev.lyriclane.media.CarTextSlots
 import dev.lyriclane.media.SecondaryLine
 import dev.lyriclane.media.SettingsStore
@@ -249,6 +255,69 @@ fun SettingsScreen(viewModel: NowPlayingViewModel) {
         ) {
             Text("Notification access settings")
         }
+
+        Spacer(Modifier.height(24.dp))
+        HorizontalDivider()
+        Spacer(Modifier.height(16.dp))
+
+        Text("Identify songs by ear", style = MaterialTheme.typography.titleMedium)
+        Text(
+            "For when Spotify is not the source \u2014 the car radio, a passenger's " +
+                "phone. LyricLane records a few seconds and asks a recognition " +
+                "service what it is, then syncs from the position the service " +
+                "reports.\n\nThere is no free unmetered recognition service, so this " +
+                "uses credentials of your own: make a free ACRCloud audio project " +
+                "and paste its host, access key and secret below. Leave blank to " +
+                "turn the feature off.",
+            style = MaterialTheme.typography.bodySmall,
+        )
+        Spacer(Modifier.height(8.dp))
+        var host by rememberSaveable(settings.recognition.host) {
+            mutableStateOf(settings.recognition.host)
+        }
+        var key by rememberSaveable(settings.recognition.accessKey) {
+            mutableStateOf(settings.recognition.accessKey)
+        }
+        var secret by rememberSaveable(settings.recognition.accessSecret) {
+            mutableStateOf(settings.recognition.accessSecret)
+        }
+        OutlinedTextField(
+            value = host,
+            onValueChange = { host = it },
+            label = { Text("Host") },
+            placeholder = { Text("identify-eu-west-1.acrcloud.com") },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth(),
+        )
+        Spacer(Modifier.height(8.dp))
+        OutlinedTextField(
+            value = key,
+            onValueChange = { key = it },
+            label = { Text("Access key") },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth(),
+        )
+        Spacer(Modifier.height(8.dp))
+        OutlinedTextField(
+            value = secret,
+            onValueChange = { secret = it },
+            label = { Text("Access secret") },
+            singleLine = true,
+            visualTransformation = PasswordVisualTransformation(),
+            modifier = Modifier.fillMaxWidth(),
+        )
+        Spacer(Modifier.height(8.dp))
+        OutlinedButton(
+            onClick = { viewModel.setRecognition(AcrCloudConfig(host, key, secret)) },
+        ) {
+            Text("Save credentials")
+        }
+        Spacer(Modifier.height(8.dp))
+        Text(
+            "Stored on this device in the app's private settings, in plain text. " +
+                "Use a key scoped to this project only.",
+            style = MaterialTheme.typography.bodySmall,
+        )
 
         Spacer(Modifier.height(24.dp))
         Text(

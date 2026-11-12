@@ -12,7 +12,13 @@ import dev.lyriclane.lyrics.LyricsResult
 import dev.lyriclane.lyrics.PlaybackSnapshot
 import dev.lyriclane.lyrics.TimeSource
 import dev.lyriclane.lyrics.TrackIdentity
+import dev.lyriclane.recognize.MicSampler
+import dev.lyriclane.recognize.Recognition
+import dev.lyriclane.recognize.RecognitionFailure
+import dev.lyriclane.recognize.RecognitionResult
+import dev.lyriclane.recognize.SongRecognizer
 import dev.lyriclane.spotify.SpotifyNotificationListener
+import dev.lyriclane.spotify.SpotifyPlayback
 import dev.lyriclane.spotify.SpotifyState
 import dev.lyriclane.spotify.SpotifyTrack
 import dev.lyriclane.spotify.SpotifyWatcher
@@ -27,6 +33,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
@@ -45,12 +52,24 @@ class LyricLaneOrchestrator @Inject constructor(
     private val watcher: SpotifyWatcher,
     private val repository: LyricsRepository,
     private val settingsStore: SettingsStore,
+    private val recognizer: SongRecognizer,
+    private val sampler: MicSampler,
 ) {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val engine = LyricSyncEngine(scope, TimeSource { SystemClock.elapsedRealtime() })
 
-    val spotify: StateFlow<SpotifyState> = watcher.state
+    /**
+     * What is playing, from whichever source knows.
+     *
+     * Spotify's own session wins whenever it has something: it is exact, it
+     * keeps correcting the position, and it costs nothing. A microphone
+     * identification fills the gap when Spotify is silent — the radio, a
+     * passenger's phone, a CD — and lapses once the song it heard would have
+     * finished.
+     */
+    private val _spotify = MutableStateFlow(SpotifyState())
+    val spotify: StateFlow<SpotifyState> = _spotify.asStateFlow()
     val frame: StateFlow<LyricSyncEngine.Frame> = engine.frame
     val settings: StateFlow<SettingsStore.Settings> = settingsStore.settings
 
@@ -64,6 +83,13 @@ class LyricLaneOrchestrator @Inject constructor(
     val offsetMs: StateFlow<Long> = _offsetMs.asStateFlow()
 
     /** Why the last lookup ended as it did; shown when no lyrics were found. */
+    /** State of the last microphone identification, for the UI to report. */
+    private val _listening = MutableStateFlow(false)
+    val listening: StateFlow<Boolean> = _listening.asStateFlow()
+
+    private val _lastRecognition = MutableStateFlow<RecognitionFailure?>(null)
+    val lastRecognitionFailure: StateFlow<RecognitionFailure?> = _lastRecognition.asStateFlow()
+
     private val _lastLookup = MutableStateFlow<LookupReport?>(null)
     val lastLookup: StateFlow<LookupReport?> = _lastLookup.asStateFlow()
 
@@ -99,12 +125,15 @@ class LyricLaneOrchestrator @Inject constructor(
     private var armedResult: LyricsResult = LyricsResult.Idle
     private var armedDurationMs: Long = 0L
 
+    private var heard: HeardSong? = null
+    private var heardExpiryJob: Job? = null
+
     fun start() {
         if (started) return
         started = true
         watcher.start()
         scope.launch {
-            watcher.state.collect(::onSpotifyState)
+            watcher.state.collect { publishState() }
         }
         // The system binds our notification listener a moment after the user
         // grants access. Without this, the first thing they see after granting
@@ -202,7 +231,28 @@ class LyricLaneOrchestrator @Inject constructor(
 
     // --- internals ---------------------------------------------------------------------
 
-    private fun onSpotifyState(state: SpotifyState) {
+    /**
+     * Picks the source and pushes the result through the pipeline.
+     *
+     * Spotify wins whenever it has a track: it is exact and it keeps correcting
+     * the position. A song heard through the microphone only fills the silence,
+     * and is dropped the moment Spotify has something to say.
+     */
+    private fun publishState() {
+        val fromSpotify = watcher.state.value
+        val effective = when {
+            fromSpotify.track != null -> {
+                forgetHeardSong()
+                fromSpotify
+            }
+
+            else -> heard?.toState(fromSpotify.permissionGranted) ?: fromSpotify
+        }
+        _spotify.value = effective
+        applyState(effective)
+    }
+
+    private fun applyState(state: SpotifyState) {
         val track = state.track
         val signature = track?.signature
         if (signature != currentSignature) {
@@ -238,6 +288,108 @@ class LyricLaneOrchestrator @Inject constructor(
         _lastLookup.value = lookup.report
         armTimeline(lookup.result, track.durationMs)
         Log.i(TAG, "lyrics for ${track.title}: ${lookup.result.describe()}")
+    }
+
+    // --- identifying a song by ear ---------------------------------------------------
+
+    /**
+     * Records a few seconds and asks the recognition service what it is.
+     *
+     * For when Spotify is not the source: the car radio, a passenger's phone.
+     * The service reports how far into the track the sample was taken, which is
+     * what makes synced lyrics possible at all — the position then runs on from
+     * that anchor, drifting slowly, with the offset control to correct it.
+     */
+    fun identifyByEar() {
+        if (_listening.value) return
+        scope.launch {
+            _listening.value = true
+            _lastRecognition.value = null
+            try {
+                if (!recognizer.isConfigured) {
+                    _lastRecognition.value = RecognitionFailure.NotConfigured
+                    return@launch
+                }
+                val sample = try {
+                    sampler.record(SAMPLE_MS)
+                } catch (e: MicSampler.RecordingFailed) {
+                    Log.w(TAG, "could not record", e)
+                    _lastRecognition.value =
+                        RecognitionFailure.CannotRecord(e.message ?: "Could not record")
+                    return@launch
+                }
+
+                when (val outcome = recognizer.identify(sample)) {
+                    is RecognitionResult.Identified -> {
+                        Log.i(TAG, "heard \"${outcome.recognition.title}\"")
+                        rememberHeardSong(outcome.recognition, sample.startedAtElapsedRealtimeMs)
+                    }
+
+                    is RecognitionResult.Failed -> {
+                        Log.i(TAG, "not identified: ${outcome.failure}")
+                        _lastRecognition.value = outcome.failure
+                    }
+                }
+            } finally {
+                _listening.value = false
+            }
+        }
+    }
+
+    private fun rememberHeardSong(recognition: Recognition, anchorElapsedRealtimeMs: Long) {
+        heard = HeardSong(recognition, anchorElapsedRealtimeMs)
+        heardExpiryJob?.cancel()
+        // Let it lapse when the song it heard would have ended, rather than
+        // leaving a stale lyric on the car screen indefinitely.
+        val remaining = recognition.durationMs - recognition.playOffsetMs
+        if (remaining > 0) {
+            heardExpiryJob = scope.launch {
+                delay(remaining)
+                forgetHeardSong()
+                publishState()
+            }
+        }
+        publishState()
+    }
+
+    private fun forgetHeardSong() {
+        if (heard == null) return
+        heard = null
+        heardExpiryJob?.cancel()
+        heardExpiryJob = null
+    }
+
+    /** Drops the heard song and goes back to whatever Spotify says. */
+    fun stopListening() {
+        forgetHeardSong()
+        publishState()
+    }
+
+    private data class HeardSong(
+        val recognition: Recognition,
+        val anchorElapsedRealtimeMs: Long,
+    ) {
+        fun toState(permissionGranted: Boolean) = SpotifyState(
+            permissionGranted = permissionGranted,
+            spotifyRunning = true,
+            track = SpotifyTrack(
+                title = recognition.title,
+                artist = recognition.artist,
+                album = recognition.album,
+                durationMs = recognition.durationMs,
+                artwork = null,
+                isAdvertisement = false,
+            ),
+            playback = SpotifyPlayback(
+                isPlaying = true,
+                positionMs = recognition.playOffsetMs,
+                speed = 1f,
+                // The service's offset describes the moment the clip started,
+                // so that is where the clock is anchored.
+                updatedAtElapsedRealtime = anchorElapsedRealtimeMs,
+            ),
+            fromMicrophone = true,
+        )
     }
 
     private fun armTimeline(result: LyricsResult, durationMs: Long) {
@@ -285,5 +437,8 @@ class LyricLaneOrchestrator @Inject constructor(
 
     companion object {
         private const val TAG = "LyricLane"
+
+        /** Long enough to identify reliably, short enough to upload quickly. */
+        const val SAMPLE_MS = 8_000L
     }
 }

@@ -7,6 +7,12 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
+    <!-- Optional: identifying a song by ear when Spotify is not the source.
+         The app works fully without it; nothing records unless you ask. -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
+    <uses-feature android:name="android.hardware.microphone" android:required="false" />
+
     <!-- No MEDIA_CONTENT_CONTROL: MediaSessionManager.getActiveSessions is
          reachable for an *enabled notification listener*, which is what the
          onboarding flow asks for. That permission is privileged and a
@@ -40,6 +46,14 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!-- Separate from the media service on purpose: the microphone
+             foreground-service type may only be started by an app holding
+             RECORD_AUDIO, and the media session must not depend on that. -->
+        <service
+            android:name=".media.ListeningService"
+            android:exported="false"
+            android:foregroundServiceType="microphone" />
 
         <service
             android:name=".media.LyricLaneService"

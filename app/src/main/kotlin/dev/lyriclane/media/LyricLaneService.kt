@@ -260,7 +260,7 @@ class LyricLaneService : MediaLibraryService() {
             params: LibraryParams?,
         ): ListenableFuture<LibraryResult<ImmutableList<MediaItem>>> {
             val children = when (parentId) {
-                ROOT_ID -> ImmutableList.of(nowPlayingItem(), settingsFolder())
+                ROOT_ID -> ImmutableList.of(nowPlayingItem(), listenItem(), settingsFolder())
                 SETTINGS_ID -> ImmutableList.copyOf(settingsItems())
                 else -> ImmutableList.of()
             }
@@ -280,6 +280,9 @@ class LyricLaneService : MediaLibraryService() {
 
             mediaId == SETTINGS_ID ->
                 Futures.immediateFuture(LibraryResult.ofItem(settingsFolder(), null))
+
+            mediaId == LISTEN_ID ->
+                Futures.immediateFuture(LibraryResult.ofItem(listenItem(), null))
 
             mediaId.startsWith(SETTING_PREFIX) ->
                 settingsItems().firstOrNull { it.mediaId == mediaId }
@@ -305,11 +308,11 @@ class LyricLaneService : MediaLibraryService() {
             controller: MediaSession.ControllerInfo,
             mediaItems: MutableList<MediaItem>,
         ): ListenableFuture<MutableList<MediaItem>> {
-            val settingId = mediaItems.firstOrNull { it.mediaId.startsWith(SETTING_PREFIX) }?.mediaId
-            if (settingId != null) {
-                applySetting(settingId)
-            } else {
-                orchestrator.play()
+            val tapped = mediaItems.firstOrNull()?.mediaId
+            when {
+                tapped == LISTEN_ID -> ListeningService.start(this@LyricLaneService)
+                tapped != null && tapped.startsWith(SETTING_PREFIX) -> applySetting(tapped)
+                else -> orchestrator.play()
             }
             return Futures.immediateFuture(mutableListOf(nowPlayingItem()))
         }
@@ -326,6 +329,16 @@ class LyricLaneService : MediaLibraryService() {
                 .build()
         )
         .build()
+
+    /**
+     * Identify what is playing by ear, for when Spotify is not the source —
+     * the car radio, a passenger's phone.
+     */
+    private fun listenItem(): MediaItem = settingItem(
+        mediaId = LISTEN_ID,
+        title = "Identify what's playing",
+        subtitle = "Listens for a few seconds · for radio and other sources",
+    )
 
     private fun settingsFolder(): MediaItem = browsableItem(
         mediaId = SETTINGS_ID,
@@ -456,6 +469,7 @@ class LyricLaneService : MediaLibraryService() {
         private const val IDLE_UID = "lyriclane_idle"
         const val ROOT_ID = "lyriclane_root"
         const val SETTINGS_ID = "lyriclane_settings"
+        const val LISTEN_ID = "lyriclane_listen"
 
         private const val SETTING_PREFIX = "lyriclane_set/"
         private const val SETTING_LINE_LENGTH = SETTING_PREFIX + "line_length"

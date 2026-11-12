@@ -30,5 +30,6 @@ dependencies {
 
     testImplementation(libs.junit)
     testImplementation(libs.truth)
+    testImplementation(libs.org.json)
     testImplementation(libs.kotlinx.coroutines.test)
 }

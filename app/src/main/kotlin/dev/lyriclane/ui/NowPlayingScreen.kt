@@ -28,12 +28,18 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import android.Manifest
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import dev.lyriclane.lyrics.LyricLine
 import dev.lyriclane.lyrics.LyricsResult
+import dev.lyriclane.media.ListeningService
+import dev.lyriclane.recognize.RecognitionFailure
 import java.util.Locale
 
 @Composable
@@ -46,6 +52,12 @@ fun NowPlayingScreen(viewModel: NowPlayingViewModel) {
     val settings by viewModel.settings.collectAsStateWithLifecycle()
     val lastLookup by viewModel.lastLookup.collectAsStateWithLifecycle()
     val timeline by viewModel.timeline.collectAsStateWithLifecycle()
+    val listening by viewModel.listening.collectAsStateWithLifecycle()
+    val recognitionFailure by viewModel.recognitionFailure.collectAsStateWithLifecycle()
+    val context = LocalContext.current
+    val micPermission = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted -> if (granted) ListeningService.start(context) }
     var pickerOpen by remember { mutableStateOf(false) }
 
     Column(Modifier.fillMaxSize()) {
@@ -122,6 +134,39 @@ fun NowPlayingScreen(viewModel: NowPlayingViewModel) {
                 onClick = viewModel::retry,
                 modifier = Modifier.weight(1f),
             ) { Text("Look again") }
+        }
+
+        Spacer(Modifier.height(8.dp))
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            OutlinedButton(
+                enabled = !listening,
+                onClick = {
+                    if (ListeningService.hasMicrophonePermission(context)) {
+                        ListeningService.start(context)
+                    } else {
+                        micPermission.launch(Manifest.permission.RECORD_AUDIO)
+                    }
+                },
+                modifier = Modifier.weight(1f),
+            ) {
+                Text(if (listening) "Listening\u2026" else "Identify what's playing")
+            }
+            if (spotify.fromMicrophone) {
+                OutlinedButton(onClick = viewModel::stopListening) { Text("Clear") }
+            }
+        }
+        recognitionMessage(recognitionFailure, spotify.fromMicrophone)?.let { message ->
+            Text(
+                text = message,
+                style = MaterialTheme.typography.bodySmall,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+            )
         }
 
         Spacer(Modifier.height(8.dp))
@@ -317,6 +362,26 @@ private fun statusLine(lyrics: LyricsResult, playing: Boolean, lineCount: Int): 
         LyricsResult.Idle -> "idle"
     }
     return if (playing) "playing · $state" else "paused · $state"
+}
+
+private fun recognitionMessage(
+    failure: RecognitionFailure?,
+    fromMicrophone: Boolean,
+): String? = when {
+    fromMicrophone ->
+        "Heard through the microphone \u2014 the position is an estimate and will " +
+            "drift. Nudge it with Earlier/Later."
+
+    failure == null -> null
+    failure is RecognitionFailure.NotConfigured ->
+        "Add recognition credentials in Settings first."
+
+    failure is RecognitionFailure.NoMatch ->
+        "Could not place that. Try again with the music a little louder."
+
+    failure is RecognitionFailure.CannotRecord -> failure.reason
+    failure is RecognitionFailure.ServiceError -> failure.message
+    else -> null
 }
 
 /** How many already-sung lines stay on screen above the active one. */

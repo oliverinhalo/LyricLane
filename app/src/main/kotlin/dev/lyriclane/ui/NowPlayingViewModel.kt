@@ -10,6 +10,7 @@ import dev.lyriclane.lyrics.LyricsCandidate
 import dev.lyriclane.media.CarDisplay
 import dev.lyriclane.media.LyricLaneOrchestrator
 import dev.lyriclane.media.CarLineLength
+import dev.lyriclane.recognize.AcrCloudConfig
 import dev.lyriclane.media.CarTextSlots
 import dev.lyriclane.media.SecondaryLine
 import dev.lyriclane.media.SettingsStore
@@ -33,6 +34,8 @@ class NowPlayingViewModel @Inject constructor(
 
     /** The split timeline the engine runs on; the frame's index points into it. */
     val timeline = orchestrator.timeline
+    val listening = orchestrator.listening
+    val recognitionFailure = orchestrator.lastRecognitionFailure
     val settings = settingsStore.settings
 
     /** Exactly what the car is being shown, so the phone can verify it. */
@@ -61,6 +64,8 @@ class NowPlayingViewModel @Inject constructor(
     fun nudgeOffset(deltaMs: Long) = orchestrator.nudgeOffset(deltaMs)
     fun resetOffset() = orchestrator.setOffset(0L)
     fun retry() = orchestrator.retryCurrent()
+    fun stopListening() = orchestrator.stopListening()
+    fun setRecognition(config: AcrCloudConfig) = settingsStore.setRecognition(config)
 
     fun setSecondaryLine(mode: SecondaryLine) = settingsStore.setSecondaryLine(mode)
     fun setCarTextSlots(slots: CarTextSlots) = settingsStore.setCarTextSlots(slots)

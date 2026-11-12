@@ -100,7 +100,7 @@ object CarDisplayFormatter {
         if (!spotify.spotifyRunning || track == null) {
             return CarDisplay(
                 primary = "Nothing playing on Spotify",
-                secondary = "Start a song in Spotify",
+                secondary = "Start Spotify, or tap Identify what's playing",
             )
         }
         val songInfo = songInfo(track.title, track.artist)

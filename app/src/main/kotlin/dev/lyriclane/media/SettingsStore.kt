@@ -3,6 +3,7 @@ package dev.lyriclane.media
 import android.content.Context
 import android.content.SharedPreferences
 import dagger.hilt.android.qualifiers.ApplicationContext
+import dev.lyriclane.recognize.AcrCloudConfig
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -31,6 +32,12 @@ class SettingsStore @Inject constructor(@ApplicationContext context: Context) {
         val lyricInTitle: Boolean = false,
         /** How much text goes on one car line before it is split. */
         val carLineLength: CarLineLength = CarLineLength.DEFAULT,
+        /**
+         * Credentials for the song-recognition service, supplied by the user.
+         * There is no free unmetered recognition service, so there is no key to
+         * ship — and shipping one in a sideloaded app would not survive anyway.
+         */
+        val recognition: AcrCloudConfig = AcrCloudConfig.EMPTY,
         val packTwoLines: Boolean = false,
         /** Multiplier on the lyric text size on the phone screen. */
         val lyricTextScale: Float = DEFAULT_TEXT_SCALE,
@@ -53,6 +60,12 @@ class SettingsStore @Inject constructor(@ApplicationContext context: Context) {
     fun setLyricInTitle(enabled: Boolean) = edit { putBoolean(KEY_LYRIC_IN_TITLE, enabled) }
 
     fun setCarLineLength(length: CarLineLength) = edit { putString(KEY_LINE_LENGTH, length.name) }
+
+    fun setRecognition(config: AcrCloudConfig) = edit {
+        putString(KEY_ACR_HOST, config.host.trim())
+        putString(KEY_ACR_KEY, config.accessKey.trim())
+        putString(KEY_ACR_SECRET, config.accessSecret.trim())
+    }
 
     fun setPackTwoLines(pack: Boolean) = edit { putBoolean(KEY_PACK_TWO_LINES, pack) }
 
@@ -84,6 +97,11 @@ class SettingsStore @Inject constructor(@ApplicationContext context: Context) {
         lyricsEnabled = prefs.getBoolean(KEY_LYRICS_ON, true),
         showArtwork = prefs.getBoolean(KEY_SHOW_ARTWORK, true),
         lyricInTitle = prefs.getBoolean(KEY_LYRIC_IN_TITLE, false),
+        recognition = AcrCloudConfig(
+            host = prefs.getString(KEY_ACR_HOST, "").orEmpty(),
+            accessKey = prefs.getString(KEY_ACR_KEY, "").orEmpty(),
+            accessSecret = prefs.getString(KEY_ACR_SECRET, "").orEmpty(),
+        ),
         carLineLength = runCatching {
             CarLineLength.valueOf(prefs.getString(KEY_LINE_LENGTH, CarLineLength.DEFAULT.name)!!)
         }.getOrDefault(CarLineLength.DEFAULT),
@@ -111,6 +129,9 @@ class SettingsStore @Inject constructor(@ApplicationContext context: Context) {
         private const val KEY_SHOW_ARTWORK = "show_artwork"
         private const val KEY_LYRIC_IN_TITLE = "lyric_in_title"
         private const val KEY_LINE_LENGTH = "car_line_length"
+        private const val KEY_ACR_HOST = "acr_host"
+        private const val KEY_ACR_KEY = "acr_access_key"
+        private const val KEY_ACR_SECRET = "acr_access_secret"
         private const val KEY_PACK_TWO_LINES = "pack_two_lines"
         private const val KEY_TEXT_SCALE = "lyric_text_scale"
     }

@@ -14,8 +14,8 @@ android {
         applicationId = "dev.lyriclane"
         minSdk = 26
         targetSdk = 35
-        versionCode = 7
-        versionName = "1.1.0"
+        versionCode = 8
+        versionName = "1.2.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
@@ -60,6 +60,7 @@ dependencies {
     implementation(project(":core:media"))
     implementation(project(":core:lyrics"))
     implementation(project(":core:spotify"))
+    implementation(project(":core:recognize"))
 
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
